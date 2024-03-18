@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"sync"
+	"time"
 
 	"encoding/json"
 	"github.com/alecthomas/kingpin/v2"
@@ -45,7 +46,15 @@ func createOutputLogger() *zap.Logger {
 	consoleEncoder := zapcore.NewConsoleEncoder(encoderConfig)
 
 	core := zapcore.NewCore(consoleEncoder, zapcore.Lock(os.Stdout), zapcore.DebugLevel)
-	return zap.New(core)
+
+	sampling := zapcore.NewSamplerWithOptions(
+		core,
+		time.Second,
+		3,
+		0,
+	)
+
+	return zap.New(sampling)
 }
 
 func processEvents(logger *zap.Logger, eventChannel <-chan events.EngineEvent) {
@@ -101,6 +110,25 @@ func deploy(stack string) {
 		}
 		os.Exit(1)
 	}
+
+	// Deploy Monitoring stack
+	monitoringEventChannel := make(chan events.EngineEvent)
+	go processEvents(logger, monitoringEventChannel)
+	monitoringStack := createOrSelectStack(ctx, stack, fmt.Sprintf("%s/monitoring", *path))
+	if *jsonLogging {
+		_, err = monitoringStack.Up(ctx, optup.EventStreams(monitoringEventChannel))
+	} else {
+		_, err = monitoringStack.Up(ctx, optup.ProgressStreams(os.Stdout))
+	}
+	if err != nil {
+		if *jsonLogging {
+			logger.Error("Failed to update monitoring stack", zap.Error(err))
+		} else {
+			fmt.Printf("Failed to update monitoring stack: %v\n", err)
+		}
+		os.Exit(1)
+	}
+
 }
 
 func destroy(stack string) {
@@ -109,11 +137,29 @@ func destroy(stack string) {
 
 	ctx := context.Background()
 
+	// Destroy monitoring stack
+	monitoringEventChannel := make(chan events.EngineEvent)
+	go processEvents(logger, monitoringEventChannel)
+	monitoringStack := createOrSelectStack(ctx, stack, fmt.Sprintf("%s/eks", *path))
+	var err error
+	if *jsonLogging {
+		_, err = monitoringStack.Destroy(ctx, optdestroy.EventStreams(monitoringEventChannel))
+	} else {
+		_, err = monitoringStack.Destroy(ctx, optdestroy.ProgressStreams(os.Stdout))
+	}
+	if err != nil {
+		if *jsonLogging {
+			logger.Error("Failed to destroy monitoring stack", zap.Error(err))
+		} else {
+			fmt.Printf("Failed to destroy monitoring stack: %v\n", err)
+		}
+		os.Exit(1)
+	}
+
 	// Destroy EKS stack
 	eksEventChannel := make(chan events.EngineEvent)
 	go processEvents(logger, eksEventChannel)
 	eksStack := createOrSelectStack(ctx, stack, fmt.Sprintf("%s/eks", *path))
-	var err error
 	if *jsonLogging {
 		_, err = eksStack.Destroy(ctx, optdestroy.EventStreams(eksEventChannel))
 	} else {

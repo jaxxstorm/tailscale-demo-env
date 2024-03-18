@@ -1,0 +1,10 @@
+name: tailscale-demo-monitoring
+runtime:
+  name: python
+  options:
+    virtualenv: venv
+description: Monitoring components for EKS
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: aws-python

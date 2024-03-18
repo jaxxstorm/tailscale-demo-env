@@ -42,7 +42,11 @@ cluster = eks.Cluster(
     enable_external_ingress=True,
     enable_internal_ingress=False,
     lets_encrypt_email="lets-encrypt@lbrlabs.com",
+    tags=TAGS,
 )
+
+pulumi.export("kubeconfig", cluster.kubeconfig)
+pulumi.export("cluster_name", cluster.cluster_name)
 
 # retrieve the security group used for node to node communitation
 sg = cluster.control_plane.vpc_config.cluster_security_group_id
@@ -66,7 +70,7 @@ provider = k8s.Provider(
     kubeconfig=cluster.kubeconfig,
     opts=pulumi.ResourceOptions(depends_on=[ingress]),
 )
-pulumi.export("kubeconfig", cluster.kubeconfig)
+
 
 # create a karpenter autoscaling group
 workload = eks.AutoscaledNodeGroup(
@@ -142,121 +146,7 @@ tailscale_operator = k8s.helm.v3.Release(
     opts=pulumi.ResourceOptions(provider=provider, parent=tailscale_ns),
 )
 
-monitoring_ns = k8s.core.v1.Namespace(
-    "monitoring",
-    metadata=k8s.meta.v1.ObjectMetaArgs(
-        name="monitoring",
-    ),
-    opts=pulumi.ResourceOptions(provider=provider),
-)
 
-kube_prometheus = k8s.helm.v3.Release(
-    "kube-prometheus",
-    repository_opts=k8s.helm.v3.RepositoryOptsArgs(
-        repo="https://prometheus-community.github.io/helm-charts",
-    ),
-    chart="kube-prometheus-stack",
-    namespace=monitoring_ns.metadata.name,
-    version="57.0.1",
-    values={
-        "grafana": {
-            "enabled": False,
-        },
-        "prometheus-node-exporter": {
-            "affinity": {
-                "nodeAffinity": {
-                    "requiredDuringSchedulingIgnoredDuringExecution": {
-                        "nodeSelectorTerms": [
-                            {
-                                "matchExpressions": [
-                                    {
-                                        "key": "eks.amazonaws.com/compute-type",
-                                        "operator": "NotIn",
-                                        "values": ["fargate"],
-                                    }
-                                ]
-                            }
-                        ]
-                    }
-                }
-            }
-        },
-        "alertmanager": {
-            "alertmanagerSpec": {
-                "tolerations": [
-                    {
-                        "key": "node.lbrlabs.com/system",
-                        "operator": "Equal",
-                        "value": "true",
-                        "effect": "NoSchedule",
-                    },
-                ],
-            },
-        },
-        "admissionWebhooks": {
-            "patch": {
-                "tolerations": [
-                    {
-                        "key": "node.lbrlabs.com/system",
-                        "operator": "Equal",
-                        "value": "true",
-                        "effect": "NoSchedule",
-                    },
-                ],
-            }
-        },
-        "kubeStateMetrics": {
-            "tolerations": [
-                {
-                    "key": "node.lbrlabs.com/system",
-                    "operator": "Equal",
-                    "value": "true",
-                    "effect": "NoSchedule",
-                },
-            ],
-        },
-        "nodeExporter": {
-            "tolerations": [
-                {
-                    "key": "node.lbrlabs.com/system",
-                    "operator": "Equal",
-                    "value": "true",
-                    "effect": "NoSchedule",
-                }
-            ],
-        },
-        "prometheus": {
-            "ingress": {
-                "enabled": True,
-                "hosts": [f"prometheus-{NAME}"],
-                "ingressClassName": "tailscale",
-                "tls": [
-                    {
-                        "hosts": [f"prometheus-{NAME}"],
-                    }
-                ],
-            },
-            "prometheusSpec": {
-                "externalLabels": {
-                    "cluster": cluster.cluster_name,
-                },
-                "serviceMonitorSelector": {},
-                "serviceMonitorSelectorNilUsesHelmValues": False,
-                "tolerations": [
-                    {
-                        "key": "node.lbrlabs.com/system",
-                        "operator": "Equal",
-                        "value": "true",
-                        "effect": "NoSchedule",
-                    }
-                ],
-            },
-        },
-    },
-    opts=pulumi.ResourceOptions(
-        parent=monitoring_ns, provider=provider, depends_on=[tailscale_operator]
-    ),
-)
 
 
 # ipv6_cidr = ip_calc.get_4via6_address(1, "10.100.0.0/16")

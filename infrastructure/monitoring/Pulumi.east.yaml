@@ -1,0 +1,5 @@
+config:
+  aws:region: us-east-1
+  aws:allowedAccountIds:
+    - "797495827785"
+  tailscale-demo-monitoring:grafana_enabled: false
