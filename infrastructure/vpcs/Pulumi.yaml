@@ -1,0 +1,10 @@
+name: tailscale-demo-vpcs
+runtime:
+  name: python
+  options:
+    virtualenv: venv
+description: Hub and spoke VPCs for Tailscale Demos
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: aws-python

@@ -1,0 +1,10 @@
+name: tailscale-demo-eks
+runtime:
+  name: python
+  options:
+    virtualenv: venv
+description: EKS clusters for Demo Env
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: aws-python

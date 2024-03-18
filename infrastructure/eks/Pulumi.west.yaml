@@ -1,0 +1,7 @@
+config:
+  aws:allowedAccountIds:
+    - "797495827785"
+  aws:region: us-west-2
+  tailscale:oauth_client_id: k9feA2LEeX11CNTRL
+  tailscale:oauth_client_secret:
+    secure: AAABABYLkBKQwOXyGGKkl+qv+stpFnd7cs2b+97TebpCo4fRAjNbjSQuuB4I3sYmSFjjX3NQsZnNO7DrsszsYfPTrkrzWxIMuK2lYHlVAL53/kiXTDv+eZVDw61BTPpO
