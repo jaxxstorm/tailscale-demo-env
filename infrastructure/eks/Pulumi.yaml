@@ -1,4 +1,4 @@
-name: tailscale-demo-eks
+name: kubecon-demo-eks
 runtime:
   name: python
   options:

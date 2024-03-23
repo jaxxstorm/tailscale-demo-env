@@ -1,9 +1,9 @@
-name: tailscale-demo-vpcs
+name: kube-demo-vpcs
 runtime:
   name: python
   options:
     virtualenv: venv
-description: Hub and spoke VPCs for Tailscale Demos
+description: Hub and spoke VPCs for Kubecon
 config:
   pulumi:tags:
     value:

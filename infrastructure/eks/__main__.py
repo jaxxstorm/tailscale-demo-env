@@ -12,13 +12,13 @@ TAGS = {
     "project": PROJECT_NAME,
     "owner": "lbriggs",
     "deployed_by": "pulumi",
-    "org": "lbrlabs",
+    "tailscale_org": "ts-demos.org.github",
 }
 
-VPC = pulumi.StackReference(f"lbrlabs58/tailscale-demo-vpcs/{STACK}")
+VPC = pulumi.StackReference(f"lbrlabs58/kube-demo-vpcs/{STACK}")
 VPC_ID = VPC.get_output("vpc_id")
-PUBLIC_SUBNET_IDS = VPC.get_output("public_subnet_ids")
-PRIVATE_SUBNET_IDS = VPC.get_output("private_subnet_ids")
+PUBLIC_SUBNET_IDS = VPC.require_output("public_subnet_ids")
+PRIVATE_SUBNET_IDS = VPC.require_output("private_subnet_ids")
 
 AWS_CONFIG = pulumi.Config("aws")
 REGION = AWS_CONFIG.require("region")
@@ -28,17 +28,18 @@ TAILSCALE_CONFIG = pulumi.Config("tailscale")
 TAILSCALE_OAUTH_CLIENT_ID = TAILSCALE_CONFIG.require("oauth_client_id")
 TAILSCALE_OAUTH_CLIENT_SECRET = TAILSCALE_CONFIG.require_secret("oauth_client_secret")
 
-# create a cluster
-# no internal ingress controller
-# fully private cluster
+CONFIG = pulumi.Config()
+SITE = CONFIG.require_int("site")
+
+
 cluster = eks.Cluster(
-    f"lbr-{NAME}",
+    f"kc-{NAME}",
     cluster_subnet_ids=PRIVATE_SUBNET_IDS,
-    cluster_endpoint_private_access=True,
-    cluster_endpoint_public_access=False,
     system_node_subnet_ids=PRIVATE_SUBNET_IDS,
     system_node_instance_types=["t3.medium"],
     system_node_desired_count=2,
+    cluster_endpoint_public_access=False,
+    cluster_endpoint_private_access=True,
     enable_external_ingress=True,
     enable_internal_ingress=False,
     lets_encrypt_email="lets-encrypt@lbrlabs.com",
@@ -54,7 +55,7 @@ vpc = aws.ec2.get_vpc_output(id=VPC_ID)
 
 # allow all access from inside the VPC cidr
 ingress = aws.ec2.SecurityGroupRule(
-    f"lbr-{NAME}-allow-vpc-traffic",
+    f"kc-{NAME}-allow-vpc-traffic",
     type="ingress",
     to_port=0,
     from_port=0,
@@ -66,7 +67,7 @@ ingress = aws.ec2.SecurityGroupRule(
 # create a provider
 # we need to wait for the ingress sg rule so we can use it
 provider = k8s.Provider(
-    f"lbr-{NAME}",
+    f"kc-{NAME}",
     kubeconfig=cluster.kubeconfig,
     opts=pulumi.ResourceOptions(depends_on=[ingress]),
 )
@@ -74,7 +75,7 @@ provider = k8s.Provider(
 
 # create a karpenter autoscaling group
 workload = eks.AutoscaledNodeGroup(
-    f"lbr-{NAME}-private",
+    f"kc-{NAME}-private",
     node_role=cluster.karpenter_node_role.name,
     security_group_ids=[cluster.control_plane.vpc_config.cluster_security_group_id],
     subnet_ids=PRIVATE_SUBNET_IDS,
@@ -123,6 +124,7 @@ tailscale_operator = k8s.helm.v3.Release(
     ),
     namespace=tailscale_ns.metadata.name,
     chart="tailscale-operator",
+    version="1.61.11",
     values={
         "oauth": {
             "clientId": TAILSCALE_OAUTH_CLIENT_ID,
@@ -132,6 +134,10 @@ tailscale_operator = k8s.helm.v3.Release(
             "mode": "true",
         },
         "operatorConfig": {
+            "image": {
+                "repo": "gcr.io/csi-test-290908/operator",
+                "tag": "v0.0.1noacceptroutes",
+            },
             "hostname": f"eks-operator-{STACK}",
             "tolerations": [
                 {
@@ -146,20 +152,43 @@ tailscale_operator = k8s.helm.v3.Release(
     opts=pulumi.ResourceOptions(provider=provider, parent=tailscale_ns),
 )
 
+admin_role = aws.iam.get_role_output(
+    name="AWSReservedSSO_AdministratorAccess_d9b9fbdff66748e1",
+)
+
+eks.IamRoleMapping(
+    "admins",
+    username="admins",
+    role_arn=admin_role.arn,
+    groups=["system:masters"],
+    opts=pulumi.ResourceOptions(parent=cluster, provider=provider),
+)
+
+sandbox_role = aws.iam.get_role_output(
+    name="AWSReservedSSO_Sandbox_2a30cfafeae961b0",
+)
+
+eks.IamRoleMapping(
+    "sandbox",
+    username="sandbox",
+    role_arn=sandbox_role.arn,
+    groups=["system:masters"],
+    opts=pulumi.ResourceOptions(parent=cluster, provider=provider),
+)
 
 
 
-# ipv6_cidr = ip_calc.get_4via6_address(1, "10.100.0.0/16")
+ipv6_cidr = ip_calc.get_4via6_address(SITE, "10.100.0.0/16")
 
-# service_router = k8s.apiextensions.CustomResource(
-#     f"service-router-{STACK}",
-#     kind="Connector",
-#     api_version="tailscale.com/v1alpha1",
-#     spec={
-#         "hostname": f"eks-service-router-{STACK}",
-#         "subnetRouter": {
-#             "advertiseRoutes": [ "10.100.0.0/16" ]
-#         }
-#     },
-#     opts=pulumi.ResourceOptions(provider=provider, parent=provider, depends_on=[tailscale_operator]),
-# )
+service_router = k8s.apiextensions.CustomResource(
+    f"service-router-{NAME}",
+    kind="Connector",
+    api_version="tailscale.com/v1alpha1",
+    spec={
+        "hostname": f"eks-service-router-{NAME}",
+        "subnetRouter": {
+            "advertiseRoutes": [ ipv6_cidr ]
+        }
+    },
+    opts=pulumi.ResourceOptions(provider=provider, parent=provider, depends_on=[tailscale_operator]),
+)

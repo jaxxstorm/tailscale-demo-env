@@ -1,8 +1,8 @@
 config:
-  aws:region: us-east-1
   aws:allowedAccountIds:
     - "797495827785"
-  tailscale-demo-vpcs:cidr_block: 172.17.0.0/16
-  tailscale:oauth_client_id: kWD8yGM1gE11CNTRL
+  aws:region: us-east-1
+  kube-demo-vpcs:cidr_block: 172.17.0.0/16
+  tailscale:oauth_client_id: kBRDeiYAHw11CNTRL
   tailscale:oauth_client_secret:
-    secure: AAABAPVdVzdFPB+GzfIhJXpV2f1fJcZnVyteny+QuI0rlevAm+EKhVqhuVZDoUcSziHybQzKmKHsesTRglvr93NqZocSjS3Ah5WSlMwVThOfiYJsAaYZ46VHzz5vjCY=
+    secure: AAABAPiov0po5kvYxY1Hqdr2GGE3yrXDFUj+pDoHyhposRl1d/WLtqxfalaeT6D9qocHOkrGdBKBUAuf5c3boQ9fXSA2aZeGOi5JOl2H+pQHNaSW8ivhIqBzQnbjzt8=

@@ -2,4 +2,4 @@ config:
   aws:region: eu-central-1
   aws:allowedAccountIds:
     - "797495827785"
-  tailscale-demo-monitoring:grafana_enabled: true
+  kube-demo-monitoring:grafana_enabled: true

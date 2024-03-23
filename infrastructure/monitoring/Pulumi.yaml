@@ -1,4 +1,4 @@
-name: tailscale-demo-monitoring
+name: kube-demo-monitoring
 runtime:
   name: python
   options:

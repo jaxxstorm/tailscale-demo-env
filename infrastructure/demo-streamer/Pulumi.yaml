@@ -1,0 +1,10 @@
+name: kubecon-demo-streamer
+runtime:
+  name: python
+  options:
+    virtualenv: venv
+description: Demo streamer application deployed to a cluster
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: kubernetes-python
