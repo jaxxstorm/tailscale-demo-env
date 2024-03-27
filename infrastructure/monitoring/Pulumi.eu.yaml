@@ -2,4 +2,5 @@ config:
   aws:region: eu-central-1
   aws:allowedAccountIds:
     - "797495827785"
-  kube-demo-monitoring:grafana_enabled: true
+  lbr-demo-monitoring:grafana_enabled: false
+  lbr-demo-monitoring:tailnet_address: "tail9e93b.ts.net"

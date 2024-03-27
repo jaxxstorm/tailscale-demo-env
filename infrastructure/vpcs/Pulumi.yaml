@@ -1,9 +1,9 @@
-name: kube-demo-vpcs
+name: lbr-demo-vpcs
 runtime:
   name: python
   options:
     virtualenv: venv
-description: Hub and spoke VPCs for Kubecon
+description: Hub and spoke VPCs for LBr Labs
 config:
   pulumi:tags:
     value:

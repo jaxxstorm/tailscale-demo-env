@@ -1,0 +1,43 @@
+#!/bin/bash
+
+# Function to convert dots to dashes in a string
+convert_dots_to_dashes() {
+    echo "$1" | tr '.' '-'
+}
+
+# Set default username
+username="${USER}"
+
+# Parse command line options
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        -l)
+            if [[ $# -lt 2 ]]; then
+                echo "Error: -l option requires an argument." >&2
+                exit 1
+            fi
+            username="$2"
+            shift 2
+            ;;
+        -*)
+            echo "Invalid option: $1" >&2
+            exit 1
+            ;;
+        *)
+            hostname="$1"
+            shift
+            ;;
+    esac
+done
+
+# Check if the hostname is provided
+if [ -z "$hostname" ]; then
+    echo "Please provide a hostname as an argument."
+    exit 1
+fi
+
+# Convert dots to dashes in the hostname
+converted_hostname=$(convert_dots_to_dashes "$hostname")
+
+# SSH to the converted hostname with the specified username
+ssh "${username}@${converted_hostname}"

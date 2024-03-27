@@ -1,4 +1,4 @@
-name: kube-demo-monitoring
+name: lbr-demo-monitoring
 runtime:
   name: python
   options:

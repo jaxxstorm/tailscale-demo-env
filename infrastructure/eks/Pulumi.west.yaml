@@ -2,7 +2,7 @@ config:
   aws:allowedAccountIds:
     - "797495827785"
   aws:region: us-west-2
-  kubecon-demo-eks:site: 3
-  tailscale:oauth_client_id: kF4jS7WJhC11CNTRL
+  lbr-demo-eks:site: "3"
+  tailscale:oauth_client_id: kFiG9wfeZ921CNTRL
   tailscale:oauth_client_secret:
-    secure: AAABAI7Ot/S4f0hYE8wX+hvaJ993hploX4w3pWrK2+s4ihs8xr6bnu2iW/uNB/wuxG5e+aqR3n9vjuIJIwksQx1dFhJwxWYngfYkFom9KWNXLJyfedYpdmn7sCV8qiU=
+    secure: AAABALldVtSuLRWrYMPbHJ4mx/oqYnTtd3tH5P0868yooOV2QEnSc4tWXFAxoFczoGjfR3zC5MWNiwgpiqdLbE+qx5yxwCKFZ2xp9pTqz+7rJpSZUHtHlDygyMn7uLhc

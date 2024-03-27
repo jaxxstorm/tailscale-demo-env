@@ -2,4 +2,6 @@ config:
   aws:region: us-west-2
   aws:allowedAccountIds:
     - "797495827785"
-  tailscale-demo-monitoring:grafana_enabled: false
+  lbr-demo-monitoring:grafana_enabled: true
+  lbr-demo-monitoring:grafana_ingress_enabled: true
+  lbr-demo-monitoring:tailnet_address: "tail9e93b.ts.net"

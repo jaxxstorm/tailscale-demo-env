@@ -1,0 +1,29 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: demo-streamer-d2964113
+  namespace: demo
+  annotations:
+    tailscale.com/tags: "tag:demo,tag:k8s"
+    tailscale.com/funnel: "true"
+spec:
+  defaultBackend:
+    service:
+      name: demo-streamer-7580c897
+      port:
+        number: 8080
+  ingressClassName: tailscale
+  rules:
+  - host: demo
+    http:
+      paths:
+      - backend:
+          service:
+            name: demo-streamer-7580c897
+            port:
+              number: 8080
+        path: /
+        pathType: Prefix
+  tls:
+  - hosts:
+    - demo

@@ -14,7 +14,7 @@ TAGS = {
     "org": "lbrlabs",
 }
 
-CLUSTER = pulumi.StackReference(f"lbrlabs58/kubecon-demo-eks/{STACK}")
+CLUSTER = pulumi.StackReference(f"lbrlabs58/lbr-demo-eks/{STACK}")
 CLUSTER_NAME = CLUSTER.get_output("cluster_name")
 KUBECONFIG = CLUSTER.get_output("kubeconfig")
 
@@ -24,6 +24,8 @@ NAME = "-".join(REGION.split("-")[:2])
 
 CONFIG = pulumi.Config()
 GRAFANA_ENABLED = CONFIG.get_bool("grafana_enabled")
+TAILNET_ADDRESS = CONFIG.get("tailnet_address")
+GRAFANA_INGRESS_ENABLED = CONFIG.get_bool("grafana_ingress_enabled")
 
 provider = k8s.Provider(
     f"lbr-{NAME}",
@@ -40,7 +42,7 @@ monitoring_ns = k8s.core.v1.Namespace(
 )
 
 if GRAFANA_ENABLED:
-    VPC = pulumi.StackReference(f"lbrlabs58/kube-demo-vpcs/{STACK}")
+    VPC = pulumi.StackReference(f"lbrlabs58/lbr-demo-vpcs/{STACK}")
     VPC_ID = VPC.get_output("vpc_id")
     PRIVATE_SUBNET_IDS = VPC.get_output("private_subnet_ids")
 
@@ -122,7 +124,7 @@ if GRAFANA_ENABLED:
             f"prometheus-{region}",
             metadata=k8s.meta.v1.ObjectMetaArgs(
                 annotations={
-                    "tailscale.com/tailnet-fqdn": f"monitoring-prometheus-{region}.tail5626a.ts.net",
+                    "tailscale.com/tailnet-fqdn": f"monitoring-prometheus-{region}.{TAILNET_ADDRESS}",
                 },
                 name=f"prom-{region}",
                 namespace=monitoring_ns.metadata.name,
@@ -156,11 +158,11 @@ if GRAFANA_ENABLED:
     grafana_config = {
         "enabled": GRAFANA_ENABLED,
         "ingress": {
-            "enabled": True,
+            "enabled": GRAFANA_INGRESS_ENABLED,
             "hosts": [f"grafana"],
             "ingressClassName": "tailscale",
             "annotations": {
-                "tailscale.com/funnel": "true",
+                "tailscale.com/tags": "tag:grafana",
             },
             "tls": [
                 {

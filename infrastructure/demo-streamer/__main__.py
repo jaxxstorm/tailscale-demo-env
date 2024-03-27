@@ -12,7 +12,7 @@ LABELS = {
     "org": "lbrlabs",
 }
 
-CLUSTER = pulumi.StackReference(f"lbrlabs58/kubecon-demo-eks/{STACK}")
+CLUSTER = pulumi.StackReference(f"lbrlabs58/lbr-demo-eks/{STACK}")
 CLUSTER_NAME = CLUSTER.get_output("cluster_name")
 KUBECONFIG = CLUSTER.get_output("kubeconfig")
 
@@ -25,7 +25,7 @@ provider = k8s.Provider(
 ns = k8s.core.v1.Namespace(
     "demo-streamer",
     metadata=k8s.meta.v1.ObjectMetaArgs(
-        name="demo-streamer",
+        name="demo",
     ),
     opts=pulumi.ResourceOptions(provider=provider),
 )
@@ -49,7 +49,7 @@ deployment = k8s.apps.v1.Deployment(
                     k8s.core.v1.ContainerArgs(
                         name="demo-streamer",
                         ports=[k8s.core.v1.ContainerPortArgs(container_port=8080)],
-                        image="ghcr.io/ts-demos/demo-streamer:latest",
+                        image="jaxxstorm/demo-streamer:k8s-identity-headers-monitoring",
                     ),
                 ]
             ),
@@ -71,26 +71,77 @@ svc = k8s.core.v1.Service(
     opts=pulumi.ResourceOptions(provider=provider, parent=ns),
 )
 
-ngress = k8s.networking.v1.Ingress(
-    "demo-streamer",
+# ingress = k8s.networking.v1.Ingress(
+#     "demo-streamer",
+#     metadata=k8s.meta.v1.ObjectMetaArgs(
+#         namespace=ns.metadata.name,
+#     ),
+#     spec=k8s.networking.v1.IngressSpecArgs(
+#         default_backend=k8s.networking.v1.IngressBackendArgs(
+#             service=k8s.networking.v1.IngressServiceBackendArgs(
+#                 name=svc.metadata.name,
+#                 port=k8s.networking.v1.ServiceBackendPortArgs(
+#                     number=8080,
+#                 ),
+#             )
+#         ),
+#         rules=[k8s.networking.v1.IngressRuleArgs(
+#             host="demo",
+#             http=k8s.networking.v1.HTTPIngressRuleValueArgs(
+#                 paths=[k8s.networking.v1.HTTPIngressPathArgs(
+#                     backend=k8s.networking.v1.IngressBackendArgs(
+#                         service=k8s.networking.v1.IngressServiceBackendArgs(
+#                             name=svc.metadata.name,
+#                             port=k8s.networking.v1.ServiceBackendPortArgs(
+#                                 number=8080,
+#                             )
+#                         )
+#                     ),
+#                     path="/",
+#                     path_type="Prefix",
+#                 )]
+#             ),
+#         )],
+#         ingress_class_name="tailscale",
+#         tls=[
+#             k8s.networking.v1.IngressTLSArgs(
+#                 hosts=["demo"],
+#             ),
+#         ],
+#     ),
+#     opts=pulumi.ResourceOptions(provider=provider, parent=svc),
+# )
+
+# create RBAC perms for engineer access
+clusterrole = k8s.rbac.v1.ClusterRole(
+    "engineers",
+    rules=[
+        k8s.rbac.v1.PolicyRuleArgs(
+            api_groups=["", "apps", "batch", "extensions"],
+            resources=["*"],
+            verbs=["*"],
+        )
+    ],
+    opts=pulumi.ResourceOptions(provider=provider, parent=provider),
+)
+
+# Define the RoleBinding
+rolebinding = k8s.rbac.v1.RoleBinding(
+    "engineers-rolebinding",
     metadata=k8s.meta.v1.ObjectMetaArgs(
-        namespace=ns.metadata.name,
+      namespace=ns.metadata.name,  
     ),
-    spec=k8s.networking.v1.IngressSpecArgs(
-        default_backend=k8s.networking.v1.IngressBackendArgs(
-            service=k8s.networking.v1.IngressServiceBackendArgs(
-                name=svc.metadata.name,
-                port=k8s.networking.v1.ServiceBackendPortArgs(
-                    number=8080,
-                ),
-            )
-        ),
-        ingress_class_name="tailscale",
-        tls=[
-            k8s.networking.v1.IngressTLSArgs(
-                hosts=["demo-streamer"],
-            ),
-        ],
+    subjects=[
+        k8s.rbac.v1.SubjectArgs(
+            kind="Group",
+            name="engineers",
+            api_group="rbac.authorization.k8s.io",
+        )
+    ],
+    role_ref=k8s.rbac.v1.RoleRefArgs(
+        kind="ClusterRole",
+        name=clusterrole.metadata.name,
+        api_group="rbac.authorization.k8s.io",
     ),
-    opts=pulumi.ResourceOptions(provider=provider, parent=svc),
+    opts=pulumi.ResourceOptions(provider=provider, parent=ns),
 )

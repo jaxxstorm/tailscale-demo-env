@@ -11,6 +11,7 @@ AWS_CONFIG = pulumi.Config("aws")
 REGION = AWS_CONFIG.require("region")
 NAME = "-".join(REGION.split("-")[:2])
 CONFIG = pulumi.Config()
+
 CIDR_BLOCK = CONFIG.require("cidr_block")
 TAGS = {
     "environment": STACK,
@@ -23,7 +24,7 @@ TAGS = {
 CONFIG = pulumi.Config()
 
 vpc = awsx.ec2.Vpc(
-    f"aws-{NAME}",
+    f"vpc-{NAME}",
     cidr_block=CIDR_BLOCK,
     subnet_strategy="Auto",
     subnet_specs=[

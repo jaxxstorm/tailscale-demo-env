@@ -1,4 +1,4 @@
-name: kubecon-demo-eks
+name: lbr-demo-eks
 runtime:
   name: python
   options:
