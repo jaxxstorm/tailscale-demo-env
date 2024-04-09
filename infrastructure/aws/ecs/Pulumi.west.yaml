@@ -1,0 +1,4 @@
+config:
+  aws:allowedAccountIds:
+    - "797495827785"
+  aws:region: us-west-2

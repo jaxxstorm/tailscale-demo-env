@@ -16,6 +16,7 @@ CLUSTER = pulumi.StackReference(f"lbrlabs58/lbr-demo-eks/{STACK}")
 CLUSTER_NAME = CLUSTER.get_output("cluster_name")
 KUBECONFIG = CLUSTER.get_output("kubeconfig")
 
+
 provider = k8s.Provider(
     f"provider",
     kubeconfig=KUBECONFIG,
@@ -71,46 +72,49 @@ svc = k8s.core.v1.Service(
     opts=pulumi.ResourceOptions(provider=provider, parent=ns),
 )
 
-# ingress = k8s.networking.v1.Ingress(
-#     "demo-streamer",
-#     metadata=k8s.meta.v1.ObjectMetaArgs(
-#         namespace=ns.metadata.name,
-#     ),
-#     spec=k8s.networking.v1.IngressSpecArgs(
-#         default_backend=k8s.networking.v1.IngressBackendArgs(
-#             service=k8s.networking.v1.IngressServiceBackendArgs(
-#                 name=svc.metadata.name,
-#                 port=k8s.networking.v1.ServiceBackendPortArgs(
-#                     number=8080,
-#                 ),
-#             )
-#         ),
-#         rules=[k8s.networking.v1.IngressRuleArgs(
-#             host="demo",
-#             http=k8s.networking.v1.HTTPIngressRuleValueArgs(
-#                 paths=[k8s.networking.v1.HTTPIngressPathArgs(
-#                     backend=k8s.networking.v1.IngressBackendArgs(
-#                         service=k8s.networking.v1.IngressServiceBackendArgs(
-#                             name=svc.metadata.name,
-#                             port=k8s.networking.v1.ServiceBackendPortArgs(
-#                                 number=8080,
-#                             )
-#                         )
-#                     ),
-#                     path="/",
-#                     path_type="Prefix",
-#                 )]
-#             ),
-#         )],
-#         ingress_class_name="tailscale",
-#         tls=[
-#             k8s.networking.v1.IngressTLSArgs(
-#                 hosts=["demo"],
-#             ),
-#         ],
-#     ),
-#     opts=pulumi.ResourceOptions(provider=provider, parent=svc),
-# )
+ingress = k8s.networking.v1.Ingress(
+    "demo-streamer",
+    metadata=k8s.meta.v1.ObjectMetaArgs(
+        namespace=ns.metadata.name,
+        annotations={
+            "tailscale.com/tags": "tag:demo",
+        }
+    ),
+    spec=k8s.networking.v1.IngressSpecArgs(
+        default_backend=k8s.networking.v1.IngressBackendArgs(
+            service=k8s.networking.v1.IngressServiceBackendArgs(
+                name=svc.metadata.name,
+                port=k8s.networking.v1.ServiceBackendPortArgs(
+                    number=8080,
+                ),
+            )
+        ),
+        rules=[k8s.networking.v1.IngressRuleArgs(
+            host="demo",
+            http=k8s.networking.v1.HTTPIngressRuleValueArgs(
+                paths=[k8s.networking.v1.HTTPIngressPathArgs(
+                    backend=k8s.networking.v1.IngressBackendArgs(
+                        service=k8s.networking.v1.IngressServiceBackendArgs(
+                            name=svc.metadata.name,
+                            port=k8s.networking.v1.ServiceBackendPortArgs(
+                                number=8080,
+                            )
+                        )
+                    ),
+                    path="/",
+                    path_type="Prefix",
+                )]
+            ),
+        )],
+        ingress_class_name="tailscale",
+        tls=[
+            k8s.networking.v1.IngressTLSArgs(
+                hosts=["demo"],
+            ),
+        ],
+    ),
+    opts=pulumi.ResourceOptions(provider=provider, parent=svc),
+)
 
 # create RBAC perms for engineer access
 clusterrole = k8s.rbac.v1.ClusterRole(

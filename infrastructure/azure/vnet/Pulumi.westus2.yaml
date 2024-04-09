@@ -1,0 +1,2 @@
+config:
+  azure_vnet:cidr_block: 172.20.0.0/16

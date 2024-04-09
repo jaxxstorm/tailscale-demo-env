@@ -27,6 +27,9 @@ GRAFANA_ENABLED = CONFIG.get_bool("grafana_enabled")
 TAILNET_ADDRESS = CONFIG.get("tailnet_address")
 GRAFANA_INGRESS_ENABLED = CONFIG.get_bool("grafana_ingress_enabled")
 
+STACK_REF = pulumi.StackReference("lbrlabs58/aks/westus2")
+AKS_KUBECONFIG = STACK_REF.get_output("kubeconfig")
+
 provider = k8s.Provider(
     f"lbr-{NAME}",
     kubeconfig=KUBECONFIG,
@@ -94,13 +97,15 @@ if GRAFANA_ENABLED:
         db_name="grafana",
         engine="postgres",
         instance_class="db.t4g.micro",
-        engine_version="13.10",
+        engine_version="13.13",
         vpc_security_group_ids=[security_group.id],
         username="grafana",
-        password=db_password.result,
+        password="correct-horse-battery-stable",
         tags=TAGS,
         skip_final_snapshot=True,
     )
+    
+    pulumi.export("db_host", db.endpoint)
 
     db_secret = k8s.core.v1.Secret(
         "grafana-db-secret",
@@ -109,12 +114,15 @@ if GRAFANA_ENABLED:
             namespace=monitoring_ns.metadata.name,
         ),
         string_data={
-            "PASSWORD": db_password.result,
+            "PASSWORD": "correct-horse-battery-stable",
         },
         opts=pulumi.ResourceOptions(provider=provider, parent=monitoring_ns),
     )
 
     regions = ["us-east", "us-west", "eu-central"]
+    
+    if AKS_KUBECONFIG:
+        regions.append("westus2")
 
     datasources = []
 

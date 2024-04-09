@@ -1,0 +1,10 @@
+name: azure_vnet
+runtime:
+  name: python
+  options:
+    virtualenv: venv
+description: Azure vnet
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: python

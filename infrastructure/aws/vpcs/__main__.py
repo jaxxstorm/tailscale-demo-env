@@ -66,10 +66,10 @@ bastion = ts.aws.Bastion(
 connector = ts.aws.Bastion(
     f"app-connector-{NAME}",
     vpc_id=vpc.vpc_id,
-    subnet_ids=vpc.public_subnet_ids,
+    subnet_ids=vpc.private_subnet_ids,
     region=REGION,
     high_availability=False,
-    public=True,
+    public=False,
     enable_app_connector=True,
     tailscale_tags=["tag:appconnector"],
     opts=pulumi.ResourceOptions(parent=vpc),

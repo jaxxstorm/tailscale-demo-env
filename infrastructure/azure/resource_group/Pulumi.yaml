@@ -1,0 +1,10 @@
+name: resource_group
+runtime:
+  name: python
+  options:
+    virtualenv: venv
+description: Shared resource group
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: python

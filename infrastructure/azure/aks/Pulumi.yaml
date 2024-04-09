@@ -1,0 +1,10 @@
+name: aks
+runtime:
+  name: python
+  options:
+    virtualenv: venv
+description: AKS cluster
+config:
+  pulumi:tags:
+    value:
+      pulumi:template: python
