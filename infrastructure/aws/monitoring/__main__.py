@@ -15,8 +15,9 @@ TAGS = {
 }
 
 CLUSTER = pulumi.StackReference(f"lbrlabs58/lbr-demo-eks/{STACK}")
-CLUSTER_NAME = CLUSTER.get_output("cluster_name")
-KUBECONFIG = CLUSTER.get_output("kubeconfig")
+CLUSTER_NAME = CLUSTER.require_output("cluster_name")
+KUBECONFIG = CLUSTER.require_output("kubeconfig")
+PROXYCLASS = CLUSTER.require_output("proxyclass")
 
 AWS_CONFIG = pulumi.Config("aws")
 REGION = AWS_CONFIG.require("region")
@@ -27,8 +28,6 @@ GRAFANA_ENABLED = CONFIG.get_bool("grafana_enabled")
 TAILNET_ADDRESS = CONFIG.get("tailnet_address")
 GRAFANA_INGRESS_ENABLED = CONFIG.get_bool("grafana_ingress_enabled")
 
-STACK_REF = pulumi.StackReference("lbrlabs58/aks/westus2")
-AKS_KUBECONFIG = STACK_REF.get_output("kubeconfig")
 
 provider = k8s.Provider(
     f"lbr-{NAME}",
@@ -104,7 +103,7 @@ if GRAFANA_ENABLED:
         tags=TAGS,
         skip_final_snapshot=True,
     )
-    
+
     pulumi.export("db_host", db.endpoint)
 
     db_secret = k8s.core.v1.Secret(
@@ -120,14 +119,11 @@ if GRAFANA_ENABLED:
     )
 
     regions = ["us-east", "us-west", "eu-central"]
-    
-    if AKS_KUBECONFIG:
-        regions.append("westus2")
 
     datasources = []
 
     for region in regions:
-        
+
         ext_svc = k8s.core.v1.Service(
             f"prometheus-{region}",
             metadata=k8s.meta.v1.ObjectMetaArgs(
@@ -148,10 +144,9 @@ if GRAFANA_ENABLED:
                 ignore_changes=["spec.externalName"],
             ),
         )
-        
+
         ext_name = ext_svc.metadata.name
-        
-        
+
         datasources.append(
             {
                 "name": f"prometheus-{region}",
@@ -159,7 +154,7 @@ if GRAFANA_ENABLED:
                 "url": pulumi.Output.concat("http://", ext_name, ":9090"),
                 "jsonData": {
                     "tlsSkipVerify": True,
-                }
+                },
             }
         )
 
@@ -169,6 +164,9 @@ if GRAFANA_ENABLED:
             "enabled": GRAFANA_INGRESS_ENABLED,
             "hosts": [f"grafana"],
             "ingressClassName": "tailscale",
+            "labels": {
+                "tailscale.com/proxy-class": PROXYCLASS,
+            },
             "annotations": {
                 "tailscale.com/tags": "tag:grafana",
             },
@@ -220,6 +218,8 @@ kube_prometheus = k8s.helm.v3.Release(
     chart="kube-prometheus-stack",
     namespace=monitoring_ns.metadata.name,
     version="57.0.1",
+    wait_for_jobs=False,
+    skip_await=True,
     values={
         "grafana": grafana_config,
         "prometheus-node-exporter": {
@@ -293,6 +293,9 @@ kube_prometheus = k8s.helm.v3.Release(
                 "enabled": True,
                 "hosts": [f"prometheus-{NAME}"],
                 "ingressClassName": "tailscale",
+                "labels": {
+                    "tailscale.com/proxy-class": PROXYCLASS,
+                },
                 "tls": [
                     {
                         "hosts": [f"prometheus-{NAME}"],
@@ -305,6 +308,8 @@ kube_prometheus = k8s.helm.v3.Release(
                 },
                 "serviceMonitorSelector": {},
                 "serviceMonitorSelectorNilUsesHelmValues": False,
+                "podMonitorSelector": {},
+                "podMonitorSelectorNilUsesHelmValues": False,
                 "tolerations": [
                     {
                         "key": "node.lbrlabs.com/system",
@@ -326,19 +331,56 @@ metrics_svc = k8s.core.v1.Service(
         name=f"prometheus-{NAME}",
         annotations={
             "pulumi.com/skipAwait": "true",
-        }
+        },
+        labels={
+            "tailscale.com/proxy-class": PROXYCLASS,
+        },
     ),
     spec=k8s.core.v1.ServiceSpecArgs(
         type="LoadBalancer",
         load_balancer_class="tailscale",
         selector={
             "app.kubernetes.io/name": "prometheus",
-            "operator.prometheus.io/name": pulumi.Output.concat(kube_prometheus.status.name, "-k-prometheus")
+            "operator.prometheus.io/name": pulumi.Output.concat(
+                kube_prometheus.status.name, "-k-prometheus"
+            ),
         },
         ports=[
             k8s.core.v1.ServicePortArgs(name="http-web", port=9090, target_port=9090),
-            k8s.core.v1.ServicePortArgs(name="reloader-web", port=8080, target_port=8080),
+            k8s.core.v1.ServicePortArgs(
+                name="reloader-web", port=8080, target_port=8080
+            ),
         ],
     ),
     opts=pulumi.ResourceOptions(provider=provider, parent=kube_prometheus),
+)
+
+pod_monitor = k8s.apiextensions.CustomResource(
+    f"tailscale-pod-monitor-{NAME}",
+    kind="PodMonitor",
+    api_version="monitoring.coreos.com/v1",
+    metadata=k8s.meta.v1.ObjectMetaArgs(
+        namespace=monitoring_ns.metadata.name,
+    ),
+    spec={
+        "namespaceSelector": {
+            "matchNames": ["tailscale"],
+        },
+        "selector": {
+            "matchLabels": {
+                "tailscale.com/managed": "true",
+            },
+        },
+        "podMetricsEndpoints": [
+            {
+                "port": "metrics",
+                "path": "/debug/metrics",
+            },
+        ],
+    },
+    opts=pulumi.ResourceOptions(
+        provider=provider,
+        parent=kube_prometheus,
+        depends_on=[kube_prometheus],
+    ),
 )

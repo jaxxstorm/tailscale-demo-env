@@ -38,8 +38,8 @@ cluster = eks.Cluster(
     system_node_subnet_ids=PRIVATE_SUBNET_IDS,
     system_node_instance_types=["t3.medium"],
     system_node_desired_count=2,
-    cluster_endpoint_public_access=False,
-    cluster_endpoint_private_access=True,
+    cluster_endpoint_public_access=True,
+    cluster_endpoint_private_access=False,
     enable_external_ingress=True,
     enable_internal_ingress=False,
     lets_encrypt_email="lets-encrypt@lbrlabs.com",
@@ -79,6 +79,14 @@ workload = eks.AutoscaledNodeGroup(
     node_role=cluster.karpenter_node_role.name,
     security_group_ids=[cluster.control_plane.vpc_config.cluster_security_group_id],
     subnet_ids=PRIVATE_SUBNET_IDS,
+    # disruption=eks.DisruptionConfigArgs(
+    #     consolidation_policy="WhenEmpty",
+    #     consolidate_after="60s",
+    #     expire_after="720h",
+    # ),
+    labels={
+        "foo": "bar",
+    },
     requirements=[
         eks.RequirementArgs(
             key="kubernetes.io/arch",
@@ -120,11 +128,11 @@ tailscale_ns = k8s.core.v1.Namespace(
 tailscale_operator = k8s.helm.v3.Release(
     "tailscale",
     repository_opts=k8s.helm.v3.RepositoryOptsArgs(
-        repo="https://pkgs.tailscale.com/helmcharts",
+        repo="https://pkgs.tailscale.com/unstable/helmcharts",
     ),
     namespace=tailscale_ns.metadata.name,
     chart="tailscale-operator",
-    version="1.61.11",
+    version="1.65.91",
     values={
         "oauth": {
             "clientId": TAILSCALE_OAUTH_CLIENT_ID,
@@ -134,9 +142,12 @@ tailscale_operator = k8s.helm.v3.Release(
             "mode": "true",
         },
         "operatorConfig": {
+            "defaultTags": [
+                "tag:k8s-operator",
+                f"tag:{STACK}",
+            ],
             "image": {
-                "repo": "gcr.io/csi-test-290908/operator",
-                "tag": "v0.0.1noacceptroutes",
+                "tag": "unstable-v1.65.91",
             },
             "hostname": f"eks-operator-{STACK}",
             "tolerations": [
@@ -176,9 +187,42 @@ eks.IamRoleMapping(
     opts=pulumi.ResourceOptions(parent=cluster, provider=provider),
 )
 
-
-
 ipv6_cidr = ip_calc.get_4via6_address(SITE, "10.100.0.0/16")
+
+proxyclass = k8s.apiextensions.CustomResource(
+    "metrics",
+    kind="ProxyClass",
+    api_version="tailscale.com/v1alpha1",
+    spec={
+        "metrics": {"enable": True},
+        "statefulSet": {
+            "pod": {
+                "affinity": {
+                    "podAntiAffinity": {
+                        "requiredDuringSchedulingIgnoredDuringExecution": [
+                            {
+                                "labelSelector": {
+                                    "matchExpressions": [
+                                        {
+                                            "key": "kubernetes.io/hostname",
+                                            "operator": "Exists",
+                                        }
+                                    ]
+                                },
+                                "topologyKey": "kubernetes.io/hostname",
+                            }
+                        ]
+                    }
+                }
+            }
+        },
+    },
+    opts=pulumi.ResourceOptions(
+        provider=provider, parent=provider, depends_on=[tailscale_operator]
+    ),
+)
+
+pulumi.export("proxyclass", proxyclass.metadata["name"])
 
 service_router = k8s.apiextensions.CustomResource(
     f"service-router-{NAME}",
@@ -186,9 +230,9 @@ service_router = k8s.apiextensions.CustomResource(
     api_version="tailscale.com/v1alpha1",
     spec={
         "hostname": f"eks-service-router-{NAME}",
-        "subnetRouter": {
-            "advertiseRoutes": [ ipv6_cidr ]
-        }
+        "subnetRouter": {"advertiseRoutes": [ipv6_cidr]},
     },
-    opts=pulumi.ResourceOptions(provider=provider, parent=provider, depends_on=[tailscale_operator]),
+    opts=pulumi.ResourceOptions(
+        provider=provider, parent=tailscale_operator, depends_on=[tailscale_operator]
+    ),
 )

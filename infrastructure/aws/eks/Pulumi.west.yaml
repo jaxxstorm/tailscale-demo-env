@@ -3,6 +3,6 @@ config:
     - "797495827785"
   aws:region: us-west-2
   lbr-demo-eks:site: "3"
-  tailscale:oauth_client_id: kFiG9wfeZ921CNTRL
+  tailscale:oauth_client_id: kp3JKPPaY811CNTRL
   tailscale:oauth_client_secret:
-    secure: AAABALldVtSuLRWrYMPbHJ4mx/oqYnTtd3tH5P0868yooOV2QEnSc4tWXFAxoFczoGjfR3zC5MWNiwgpiqdLbE+qx5yxwCKFZ2xp9pTqz+7rJpSZUHtHlDygyMn7uLhc
+    secure: AAABAEWwsp/YmmH0dxJMNBSEjm/+4MaR7/iH6x8R9WIE4i8uW/E0/b5iyIN6yYjbMI/WBOZgimyv6uiYqU7tLVzZJ6wzxHJHU/+VO7UGQXXdjmb2R47TgtiwtRFK3ZeA
