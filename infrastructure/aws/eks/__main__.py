@@ -22,6 +22,11 @@ PRIVATE_SUBNET_IDS = VPC.require_output("private_subnet_ids")
 
 AWS_CONFIG = pulumi.Config("aws")
 REGION = AWS_CONFIG.require("region")
+
+CONFIG = pulumi.Config("")
+ADMIN_ROLE_NAME = CONFIG.require("admin_role_name")
+
+
 NAME = "-".join(REGION.split("-")[:2])
 
 TAILSCALE_CONFIG = pulumi.Config("tailscale")
@@ -30,18 +35,23 @@ TAILSCALE_OAUTH_CLIENT_SECRET = TAILSCALE_CONFIG.require_secret("oauth_client_se
 
 CONFIG = pulumi.Config()
 SITE = CONFIG.require_int("site")
+CLUSTER_ENDPOINT_PRIVATE_ACCESS = CONFIG.get_bool("cluster_endpoint_private_access", default=True)
+CLUSTER_ENDPOINT_PUBLIC_ACCESS = CONFIG.get_bool("cluster_endpoint_public_access", default=True)
+
+ADMIN_ACCESS_PRINCIPAL = aws.iam.get_role_output(name=ADMIN_ROLE_NAME)
 
 
 cluster = eks.Cluster(
-    f"kc-{NAME}",
+    f"lbr-{NAME}",
     cluster_subnet_ids=PRIVATE_SUBNET_IDS,
     system_node_subnet_ids=PRIVATE_SUBNET_IDS,
     system_node_instance_types=["t3.medium"],
     system_node_desired_count=2,
-    cluster_endpoint_public_access=True,
-    cluster_endpoint_private_access=False,
+    cluster_endpoint_public_access=CLUSTER_ENDPOINT_PUBLIC_ACCESS,
+    cluster_endpoint_private_access=CLUSTER_ENDPOINT_PRIVATE_ACCESS,
     enable_external_ingress=True,
     enable_internal_ingress=False,
+    admin_access_principal=ADMIN_ACCESS_PRINCIPAL.arn,
     lets_encrypt_email="lets-encrypt@lbrlabs.com",
     tags=TAGS,
 )
@@ -55,7 +65,7 @@ vpc = aws.ec2.get_vpc_output(id=VPC_ID)
 
 # allow all access from inside the VPC cidr
 ingress = aws.ec2.SecurityGroupRule(
-    f"kc-{NAME}-allow-vpc-traffic",
+    f"lbr-{NAME}-allow-vpc-traffic",
     type="ingress",
     to_port=0,
     from_port=0,
@@ -67,7 +77,7 @@ ingress = aws.ec2.SecurityGroupRule(
 # create a provider
 # we need to wait for the ingress sg rule so we can use it
 provider = k8s.Provider(
-    f"kc-{NAME}",
+    f"lbr-{NAME}",
     kubeconfig=cluster.kubeconfig,
     opts=pulumi.ResourceOptions(depends_on=[ingress]),
 )
@@ -75,18 +85,10 @@ provider = k8s.Provider(
 
 # create a karpenter autoscaling group
 workload = eks.AutoscaledNodeGroup(
-    f"kc-{NAME}-private",
+    f"lbr-{NAME}-private",
     node_role=cluster.karpenter_node_role.name,
     security_group_ids=[cluster.control_plane.vpc_config.cluster_security_group_id],
     subnet_ids=PRIVATE_SUBNET_IDS,
-    # disruption=eks.DisruptionConfigArgs(
-    #     consolidation_policy="WhenEmpty",
-    #     consolidate_after="60s",
-    #     expire_after="720h",
-    # ),
-    labels={
-        "foo": "bar",
-    },
     requirements=[
         eks.RequirementArgs(
             key="kubernetes.io/arch",

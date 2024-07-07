@@ -24,7 +24,7 @@ TAGS = {
 CONFIG = pulumi.Config()
 
 vpc = awsx.ec2.Vpc(
-    f"vpc-{NAME}",
+    f"lbr-vpc-{NAME}",
     cidr_block=CIDR_BLOCK,
     subnet_strategy="Auto",
     subnet_specs=[
@@ -50,7 +50,7 @@ vpc = awsx.ec2.Vpc(
 
 
 bastion = ts.aws.Bastion(
-    f"subnet-router-{NAME}",
+    f"lbr-subnet-router-{NAME}",
     vpc_id=vpc.vpc_id,
     subnet_ids=vpc.public_subnet_ids,
     region=REGION,
@@ -64,7 +64,7 @@ bastion = ts.aws.Bastion(
 )
 
 connector = ts.aws.Bastion(
-    f"app-connector-{NAME}",
+    f"lbr-app-connector-{NAME}",
     vpc_id=vpc.vpc_id,
     subnet_ids=vpc.private_subnet_ids,
     region=REGION,

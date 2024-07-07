@@ -3,6 +3,7 @@ config:
     - "797495827785"
   aws:region: eu-central-1
   lbr-demo-eks:site: "1"
+  lbr-demo-eks:admin_role_name: AWSReservedSSO_Sandbox_2a30cfafeae961b0
   tailscale:oauth_client_id: kLH6asg6L721CNTRL
   tailscale:oauth_client_secret:
     secure: AAABAFPk+JdqZ4HdqKwmT9wtE2PWeZr213XF9jMfd1m6a4ugcJwMUGtr/ceikEFK+n241rb1FUcniufvMloWpF3UYnDCh5X+WiSCtCdXUNK/lMNq+UedmKVOGCSNkV8=

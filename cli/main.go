@@ -137,10 +137,11 @@ func destroy(stack string) {
 
 	ctx := context.Background()
 
+
 	// Destroy monitoring stack
 	monitoringEventChannel := make(chan events.EngineEvent)
 	go processEvents(logger, monitoringEventChannel)
-	monitoringStack := createOrSelectStack(ctx, stack, fmt.Sprintf("%s/eks", *path))
+	monitoringStack := createOrSelectStack(ctx, stack, fmt.Sprintf("%s/monitoring", *path))
 	var err error
 	if *jsonLogging {
 		_, err = monitoringStack.Destroy(ctx, optdestroy.EventStreams(monitoringEventChannel))

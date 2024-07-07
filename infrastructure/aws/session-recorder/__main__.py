@@ -28,6 +28,7 @@ REGION = AWS_CONFIG.require("region")
 
 bucket = aws.s3.Bucket(
     "lbr-session-bucket",
+    force_destroy=True,
     tags=TAGS,
 )
 
