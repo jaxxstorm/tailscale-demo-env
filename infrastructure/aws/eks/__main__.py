@@ -134,7 +134,6 @@ tailscale_operator = k8s.helm.v3.Release(
     ),
     namespace=tailscale_ns.metadata.name,
     chart="tailscale-operator",
-    version="1.65.91",
     values={
         "oauth": {
             "clientId": TAILSCALE_OAUTH_CLIENT_ID,
@@ -148,9 +147,6 @@ tailscale_operator = k8s.helm.v3.Release(
                 "tag:k8s-operator",
                 f"tag:{STACK}",
             ],
-            "image": {
-                "tag": "unstable-v1.65.91",
-            },
             "hostname": f"eks-operator-{STACK}",
             "tolerations": [
                 {
