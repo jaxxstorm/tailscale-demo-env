@@ -114,7 +114,6 @@ func deploy(stack string) {
         return err
     }
 
-    // Define the order of deployment
     deployOrder := []string{"vpc", "eks", "monitoring", "demo-streamer", "session-recorder"}
 
     for _, projectName := range deployOrder {
@@ -131,7 +130,7 @@ func deploy(stack string) {
 
     logger.Info(fmt.Sprintf("Completed deployment for stack: %s", stack))
 }
-// Helper function to check if a slice contains a string
+
 func contains(slice []string, str string) bool {
     for _, v := range slice {
         if v == str {
@@ -191,6 +190,30 @@ func destroy(stack string) {
     logger.Info(fmt.Sprintf("Completed destruction for stack: %s", stack))
 }
 
+func getValidStacks(requestedStacks []string) []string {
+    validStacks := make(map[string]bool)
+    for _, project := range projects {
+        if len(project.AllowedStacks) == 0 {
+            // If a project has no restrictions, all stacks are valid
+            for _, stack := range requestedStacks {
+                validStacks[stack] = true
+            }
+        } else {
+            for _, allowedStack := range project.AllowedStacks {
+                if contains(requestedStacks, allowedStack) {
+                    validStacks[allowedStack] = true
+                }
+            }
+        }
+    }
+    
+    result := make([]string, 0, len(validStacks))
+    for stack := range validStacks {
+        result = append(result, stack)
+    }
+    return result
+}
+
 func main() {
     kingpin.Version("0.0.1")
 
@@ -200,8 +223,11 @@ func main() {
 
     switch kingpin.MustParse(app.Parse(os.Args[1:])) {
     case deployCmd.FullCommand():
-        wg.Add(len(*stacks))
-        for _, stack := range *stacks {
+        validStacks := getValidStacks(*stacks)
+        fmt.Printf("Valid stacks for deployment: %v\n", validStacks)
+        
+        wg.Add(len(validStacks))
+        for _, stack := range validStacks {
             go func(stack string) {
                 defer wg.Done()
                 stackLock.Lock()
@@ -221,8 +247,11 @@ func main() {
         }
 
     case destroyCmd.FullCommand():
-        wg.Add(len(*stacks))
-        for _, stack := range *stacks {
+        validStacks := getValidStacks(*stacks)
+        fmt.Printf("Valid stacks for destruction: %v\n", validStacks)
+        
+        wg.Add(len(validStacks))
+        for _, stack := range validStacks {
             go func(stack string) {
                 defer wg.Done()
                 stackLock.Lock()
