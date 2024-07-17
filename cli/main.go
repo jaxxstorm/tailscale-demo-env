@@ -17,6 +17,20 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+type Project struct {
+    Name         string
+    Path         string
+    AllowedStacks []string // New field to specify allowed stacks
+}
+
+var projects = map[string]Project{
+    "vpc":              {Name: "vpc", Path: "vpcs", AllowedStacks: nil},
+    "eks":              {Name: "eks", Path: "eks", AllowedStacks: nil},
+    "monitoring":       {Name: "monitoring", Path: "monitoring", AllowedStacks: nil},
+    "demo-streamer":    {Name: "demo-streamer", Path: "demo-streamer", AllowedStacks: []string{"west"}},
+    "session-recorder": {Name: "session-recorder", Path: "session-recorder", AllowedStacks: []string{"west"}},
+}
+
 var (
 	app        = kingpin.New("demo-env-deployer", "A command-line application deployment tool using pulumi.")
 	deployCmd  = app.Command("deploy", "Deploy the demo env.")
@@ -69,158 +83,164 @@ func processEvents(logger *zap.Logger, eventChannel <-chan events.EngineEvent) {
 }
 
 func deploy(stack string) {
-	logger := createOutputLogger().With(zap.String("stack", stack))
-	defer logger.Sync()
+    logger := createOutputLogger().With(zap.String("stack", stack))
+    defer logger.Sync()
 
-	ctx := context.Background()
+    logger.Info(fmt.Sprintf("Starting deployment for stack: %s", stack))
 
-	// Deploy VPC stack
-	vpcEventChannel := make(chan events.EngineEvent)
-	go processEvents(logger, vpcEventChannel)
-	vpcStack := createOrSelectStack(ctx, stack, fmt.Sprintf("%s/vpcs", *path))
-	var err error
-	if *jsonLogging {
-		_, err = vpcStack.Up(ctx, optup.EventStreams(vpcEventChannel))
-	} else {
-		_, err = vpcStack.Up(ctx, optup.ProgressStreams(os.Stdout))
-	}
-	if err != nil {
-		if *jsonLogging {
-			logger.Error("Failed to update VPC stack", zap.Error(err))
-		} else {
-			fmt.Printf("Failed to update VPC stack: %v\n", err)
-		}
-		os.Exit(1)
-	}
+    ctx := context.Background()
 
-	// Deploy EKS stack
-	eksEventChannel := make(chan events.EngineEvent)
-	go processEvents(logger, eksEventChannel)
-	eksStack := createOrSelectStack(ctx, stack, fmt.Sprintf("%s/eks", *path))
-	if *jsonLogging {
-		_, err = eksStack.Up(ctx, optup.EventStreams(eksEventChannel))
-	} else {
-		_, err = eksStack.Up(ctx, optup.ProgressStreams(os.Stdout))
-	}
-	if err != nil {
-		if *jsonLogging {
-			logger.Error("Failed to update EKS stack", zap.Error(err))
-		} else {
-			fmt.Printf("Failed to update EKS stack: %v\n", err)
-		}
-		os.Exit(1)
-	}
+    deployProject := func(project Project) error {
+        if len(project.AllowedStacks) > 0 && !contains(project.AllowedStacks, stack) {
+            logger.Info(fmt.Sprintf("Skipping %s project for stack %s (not in allowed stacks)", project.Name, stack))
+            return nil
+        }
 
-	// Deploy Monitoring stack
-	monitoringEventChannel := make(chan events.EngineEvent)
-	go processEvents(logger, monitoringEventChannel)
-	monitoringStack := createOrSelectStack(ctx, stack, fmt.Sprintf("%s/monitoring", *path))
-	if *jsonLogging {
-		_, err = monitoringStack.Up(ctx, optup.EventStreams(monitoringEventChannel))
-	} else {
-		_, err = monitoringStack.Up(ctx, optup.ProgressStreams(os.Stdout))
-	}
-	if err != nil {
-		if *jsonLogging {
-			logger.Error("Failed to update monitoring stack", zap.Error(err))
-		} else {
-			fmt.Printf("Failed to update monitoring stack: %v\n", err)
-		}
-		os.Exit(1)
-	}
+        logger.Info(fmt.Sprintf("Deploying %s project for stack %s", project.Name, stack))
+        eventChannel := make(chan events.EngineEvent)
+        go processEvents(logger, eventChannel)
+        s := createOrSelectStack(ctx, stack, fmt.Sprintf("%s/%s", *path, project.Path))
+        var err error
+        if *jsonLogging {
+            _, err = s.Up(ctx, optup.EventStreams(eventChannel))
+        } else {
+            _, err = s.Up(ctx, optup.ProgressStreams(os.Stdout))
+        }
+        if err != nil {
+            logger.Error(fmt.Sprintf("Failed to update %s project for stack %s", project.Name, stack), zap.Error(err))
+        } else {
+            logger.Info(fmt.Sprintf("Successfully deployed %s project for stack %s", project.Name, stack))
+        }
+        return err
+    }
 
+    // Define the order of deployment
+    deployOrder := []string{"vpc", "eks", "monitoring", "demo-streamer", "session-recorder"}
+
+    for _, projectName := range deployOrder {
+        project, exists := projects[projectName]
+        if !exists {
+            logger.Error(fmt.Sprintf("Unknown project type: %s", projectName))
+            continue
+        }
+        if err := deployProject(project); err != nil {
+            logger.Error(fmt.Sprintf("Failed to deploy %s project for stack %s", project.Name, stack), zap.Error(err))
+            return
+        }
+    }
+
+    logger.Info(fmt.Sprintf("Completed deployment for stack: %s", stack))
+}
+// Helper function to check if a slice contains a string
+func contains(slice []string, str string) bool {
+    for _, v := range slice {
+        if v == str {
+            return true
+        }
+    }
+    return false
 }
 
 func destroy(stack string) {
-	logger := createOutputLogger().With(zap.String("stack", stack))
-	defer logger.Sync()
+    logger := createOutputLogger().With(zap.String("stack", stack))
+    defer logger.Sync()
 
-	ctx := context.Background()
+    logger.Info(fmt.Sprintf("Starting destruction for stack: %s", stack))
 
+    ctx := context.Background()
 
-	// Destroy monitoring stack
-	monitoringEventChannel := make(chan events.EngineEvent)
-	go processEvents(logger, monitoringEventChannel)
-	monitoringStack := createOrSelectStack(ctx, stack, fmt.Sprintf("%s/monitoring", *path))
-	var err error
-	if *jsonLogging {
-		_, err = monitoringStack.Destroy(ctx, optdestroy.EventStreams(monitoringEventChannel))
-	} else {
-		_, err = monitoringStack.Destroy(ctx, optdestroy.ProgressStreams(os.Stdout))
-	}
-	if err != nil {
-		if *jsonLogging {
-			logger.Error("Failed to destroy monitoring stack", zap.Error(err))
-		} else {
-			fmt.Printf("Failed to destroy monitoring stack: %v\n", err)
-		}
-		os.Exit(1)
-	}
+    destroyProject := func(project Project) error {
+        if len(project.AllowedStacks) > 0 && !contains(project.AllowedStacks, stack) {
+            logger.Info(fmt.Sprintf("Skipping %s project for stack %s (not in allowed stacks)", project.Name, stack))
+            return nil
+        }
 
-	// Destroy EKS stack
-	eksEventChannel := make(chan events.EngineEvent)
-	go processEvents(logger, eksEventChannel)
-	eksStack := createOrSelectStack(ctx, stack, fmt.Sprintf("%s/eks", *path))
-	if *jsonLogging {
-		_, err = eksStack.Destroy(ctx, optdestroy.EventStreams(eksEventChannel))
-	} else {
-		_, err = eksStack.Destroy(ctx, optdestroy.ProgressStreams(os.Stdout))
-	}
-	if err != nil {
-		if *jsonLogging {
-			logger.Error("Failed to destroy EKS stack", zap.Error(err))
-		} else {
-			fmt.Printf("Failed to destroy EKS stack: %v\n", err)
-		}
-		os.Exit(1)
-	}
+        logger.Info(fmt.Sprintf("Destroying %s project for stack %s", project.Name, stack))
+        eventChannel := make(chan events.EngineEvent)
+        go processEvents(logger, eventChannel)
+        s := createOrSelectStack(ctx, stack, fmt.Sprintf("%s/%s", *path, project.Path))
+        var err error
+        if *jsonLogging {
+            _, err = s.Destroy(ctx, optdestroy.EventStreams(eventChannel))
+        } else {
+            _, err = s.Destroy(ctx, optdestroy.ProgressStreams(os.Stdout))
+        }
+        if err != nil {
+            logger.Error(fmt.Sprintf("Failed to destroy %s project for stack %s", project.Name, stack), zap.Error(err))
+        } else {
+            logger.Info(fmt.Sprintf("Successfully destroyed %s project for stack %s", project.Name, stack))
+        }
+        return err
+    }
 
-	// Destroy VPC stack
-	vpcEventChannel := make(chan events.EngineEvent)
-	go processEvents(logger, vpcEventChannel)
-	vpcStack := createOrSelectStack(ctx, stack, fmt.Sprintf("%s/vpcs", *path))
-	if *jsonLogging {
-		_, err = vpcStack.Destroy(ctx, optdestroy.EventStreams(vpcEventChannel))
-	} else {
-		_, err = vpcStack.Destroy(ctx, optdestroy.ProgressStreams(os.Stdout))
-	}
-	if err != nil {
-		if *jsonLogging {
-			logger.Error("Failed to destroy VPC stack", zap.Error(err))
-		} else {
-			fmt.Printf("Failed to destroy VPC stack: %v\n", err)
-		}
-		os.Exit(1)
-	}
+    // Define the order of destruction (reverse of deployment order)
+    destroyOrder := []string{"session-recorder", "demo-streamer", "monitoring", "eks", "vpc"}
+
+    for _, projectName := range destroyOrder {
+        project, exists := projects[projectName]
+        if !exists {
+            logger.Error(fmt.Sprintf("Unknown project type: %s", projectName))
+            continue
+        }
+        if err := destroyProject(project); err != nil {
+            logger.Error(fmt.Sprintf("Failed to destroy %s project for stack %s", project.Name, stack), zap.Error(err))
+            return
+        }
+    }
+
+    logger.Info(fmt.Sprintf("Completed destruction for stack: %s", stack))
 }
 
 func main() {
-	kingpin.Version("0.0.1")
+    kingpin.Version("0.0.1")
 
-	var wg sync.WaitGroup
+    var wg sync.WaitGroup
+    stackLock := &sync.Mutex{}
+    activeStacks := make(map[string]bool)
 
-	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
-	case deployCmd.FullCommand():
-		wg.Add(len(*stacks))
+    switch kingpin.MustParse(app.Parse(os.Args[1:])) {
+    case deployCmd.FullCommand():
+        wg.Add(len(*stacks))
+        for _, stack := range *stacks {
+            go func(stack string) {
+                defer wg.Done()
+                stackLock.Lock()
+                if activeStacks[stack] {
+                    stackLock.Unlock()
+                    return
+                }
+                activeStacks[stack] = true
+                stackLock.Unlock()
+                
+                deploy(stack)
+                
+                stackLock.Lock()
+                delete(activeStacks, stack)
+                stackLock.Unlock()
+            }(stack)
+        }
 
-		for _, stack := range *stacks {
-			stack := stack
-			go func(stack string) {
-				deploy(stack)
-				wg.Done()
-			}(stack)
-		}
+    case destroyCmd.FullCommand():
+        wg.Add(len(*stacks))
+        for _, stack := range *stacks {
+            go func(stack string) {
+                defer wg.Done()
+                stackLock.Lock()
+                if activeStacks[stack] {
+                    stackLock.Unlock()
+                    return
+                }
+                activeStacks[stack] = true
+                stackLock.Unlock()
+                
+                destroy(stack)
+                
+                stackLock.Lock()
+                delete(activeStacks, stack)
+                stackLock.Unlock()
+            }(stack)
+        }
+    }
 
-	case destroyCmd.FullCommand():
-		wg.Add(len(*stacks))
-		for _, stack := range *stacks {
-			stack := stack
-			go func(stack string) {
-				destroy(stack)
-				wg.Done()
-			}(stack)
-		}
-	}
-
-	wg.Wait()
+    wg.Wait()
 }
