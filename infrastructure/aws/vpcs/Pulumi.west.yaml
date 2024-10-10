@@ -3,6 +3,8 @@ config:
     - "797495827785"
   aws:region: us-west-2
   lbr-demo-vpcs:cidr_block: 172.16.0.0/16
-  tailscale:oauth_client_id: kZuWN5kvMb11CNTRL
+  lbr-demo-vpcs:enable_app_connector: true
+  lbr-demo-vpcs:enable_exit_node: true
+  tailscale:oauth_client_id: kdmzo8WJn911CNTRL
   tailscale:oauth_client_secret:
-    secure: AAABADeEyjuUdiKiPHetswcLo4RrB6uDOQERfSERkCsGie476qdb75eZdnqamfkuqdMsuW0wEsO5KaVQ97o5FAgrIgn2J+fXx34bz8bVFoxEM8fXQk9o9sUYtGPD7i5H
+    secure: AAABAIEyTKUqlGJD1P66fDcGpVmuJ9U6Hx8CSef1gCLNAGXHd+vy0MRiicW6lEdBy7pvMugidjO+rSeAjOWipy7lEt6GudmLeM/XCeMp5R+3mSmvrUTW8zdYwwsq2OE=

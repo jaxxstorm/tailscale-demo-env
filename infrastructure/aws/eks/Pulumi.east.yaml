@@ -2,8 +2,8 @@ config:
   aws:allowedAccountIds:
     - "797495827785"
   aws:region: us-east-1
-  lbr-demo-eks:site: "2"
   lbr-demo-eks:admin_role_name: AWSReservedSSO_Sandbox_2a30cfafeae961b0
-  tailscale:oauth_client_id: kJksz4Wou121CNTRL
+  lbr-demo-eks:site: "2"
+  tailscale:oauth_client_id: kLpxZPtuVq11CNTRL
   tailscale:oauth_client_secret:
-    secure: AAABAOV8gPyZJ46bQdw2LDlEMbHtyXU7+MWQ5bwNyclSJUc6nCw0CCK9As3mGJHeeAxO+KsHlurESG3zDIcyWhwRG4/i9bSLjz+Gr2Zo77BsWIwcFN48qTphQ7I1U0c=
+    secure: AAABAIfA2g3U+x49XR9FQaJCfXqTzEuN2IdJZm+CpYXoZpsCPMto2HNV9UkWQmjMy+xftDOU9l4rk2/ZCjXldEnhiFV5xurTnwWbGCdlO6xdXkHSuGS44a5Xc8319RJg

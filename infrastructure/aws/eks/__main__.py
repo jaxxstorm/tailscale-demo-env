@@ -229,6 +229,7 @@ service_router = k8s.apiextensions.CustomResource(
     spec={
         "hostname": f"eks-service-router-{NAME}",
         "subnetRouter": {"advertiseRoutes": [ipv6_cidr]},
+         "tags": [f"tag:{STACK}", "tag:service-router"],
     },
     opts=pulumi.ResourceOptions(
         provider=provider, parent=tailscale_operator, depends_on=[tailscale_operator]

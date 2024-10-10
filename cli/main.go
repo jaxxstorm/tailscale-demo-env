@@ -2,8 +2,8 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -18,17 +18,16 @@ import (
 )
 
 type Project struct {
-    Name         string
-    Path         string
-    AllowedStacks []string // New field to specify allowed stacks
+	Name          string
+	Path          string
+	AllowedStacks []string
 }
 
-var projects = map[string]Project{
-    "vpc":              {Name: "vpc", Path: "vpcs", AllowedStacks: nil},
-    "eks":              {Name: "eks", Path: "eks", AllowedStacks: nil},
-    "monitoring":       {Name: "monitoring", Path: "monitoring", AllowedStacks: nil},
-    "demo-streamer":    {Name: "demo-streamer", Path: "demo-streamer", AllowedStacks: []string{"west"}},
-    "session-recorder": {Name: "session-recorder", Path: "session-recorder", AllowedStacks: []string{"west"}},
+type ProjectSource struct {
+	IsGit     bool
+	GitURL    string
+	GitBranch string
+	LocalPath string
 }
 
 var (
@@ -36,21 +35,24 @@ var (
 	deployCmd  = app.Command("deploy", "Deploy the demo env.")
 	destroyCmd = app.Command("destroy", "Destroy the demo env.")
 
-	path        = app.Flag("path", "Path to demo env directory").Default(".").String()
+	gitRepoURL  = app.Flag("git-url", "URL of the Git repository").String()
+	gitBranch   = app.Flag("git-branch", "Git branch to use").Default("main").String()
+	localPath   = app.Flag("path", "Path to local directory containing projects").String()
 	jsonLogging = app.Flag("json", "Enable JSON logging").Bool()
 	stacks      = app.Flag("stacks", "Stacks to deploy").Default("west", "east", "eu").Strings()
 )
 
-func createOrSelectStack(ctx context.Context, stackName, projectPath string) auto.Stack {
-
-	s, err := auto.UpsertStackLocalSource(ctx, stackName, projectPath)
-	if err != nil {
-		fmt.Printf("Failed to create or select stack: %v\n", err)
-		os.Exit(1)
+func createOrSelectStack(ctx context.Context, stackName string, project Project, source ProjectSource) (auto.Stack, error) {
+	if source.IsGit {
+		repo := auto.GitRepo{
+			URL:         source.GitURL,
+			Branch:      source.GitBranch,
+			ProjectPath: project.Path,
+		}
+		return auto.UpsertStackRemoteSource(ctx, stackName, repo)
 	}
-
-	return s
-
+	projectPath := filepath.Join(source.LocalPath, project.Path)
+	return auto.UpsertStackLocalSource(ctx, stackName, projectPath)
 }
 
 func createOutputLogger() *zap.Logger {
@@ -82,194 +84,235 @@ func processEvents(logger *zap.Logger, eventChannel <-chan events.EngineEvent) {
 	}
 }
 
-func deploy(stack string) {
-    logger := createOutputLogger().With(zap.String("stack", stack))
-    defer logger.Sync()
+func deploy(stack string, projects []Project, source ProjectSource) {
+	logger := createOutputLogger().With(zap.String("stack", stack), zap.Any("projects", projects))
+	defer logger.Sync()
 
-    logger.Info(fmt.Sprintf("Starting deployment for stack: %s", stack))
+	logger.Info("Starting deployment")
 
-    ctx := context.Background()
+	ctx := context.Background()
 
-    deployProject := func(project Project) error {
-        if len(project.AllowedStacks) > 0 && !contains(project.AllowedStacks, stack) {
-            logger.Info(fmt.Sprintf("Skipping %s project for stack %s (not in allowed stacks)", project.Name, stack))
-            return nil
-        }
+	deployProject := func(project Project) error {
+		if len(project.AllowedStacks) > 0 && !contains(project.AllowedStacks, stack) {
+			logger.Info("Skipping project (not in allowed stacks)", zap.String("project", project.Name))
+			return nil
+		}
 
-        logger.Info(fmt.Sprintf("Deploying %s project for stack %s", project.Name, stack))
-        eventChannel := make(chan events.EngineEvent)
-        go processEvents(logger, eventChannel)
-        s := createOrSelectStack(ctx, stack, fmt.Sprintf("%s/%s", *path, project.Path))
-        var err error
-        if *jsonLogging {
-            _, err = s.Up(ctx, optup.EventStreams(eventChannel))
-        } else {
-            _, err = s.Up(ctx, optup.ProgressStreams(os.Stdout))
-        }
-        if err != nil {
-            logger.Error(fmt.Sprintf("Failed to update %s project for stack %s", project.Name, stack), zap.Error(err))
-        } else {
-            logger.Info(fmt.Sprintf("Successfully deployed %s project for stack %s", project.Name, stack))
-        }
-        return err
-    }
+		logger.Info("Deploying project", zap.String("project", project.Name))
+		eventChannel := make(chan events.EngineEvent)
+		go processEvents(logger, eventChannel)
 
-    deployOrder := []string{"vpc", "eks", "monitoring", "demo-streamer", "session-recorder"}
+		s, err := createOrSelectStack(ctx, stack, project, source)
+		if err != nil {
+			logger.Error("Failed to create or select stack", zap.Error(err))
+			return err
+		}
 
-    for _, projectName := range deployOrder {
-        project, exists := projects[projectName]
-        if !exists {
-            logger.Error(fmt.Sprintf("Unknown project type: %s", projectName))
-            continue
-        }
-        if err := deployProject(project); err != nil {
-            logger.Error(fmt.Sprintf("Failed to deploy %s project for stack %s", project.Name, stack), zap.Error(err))
-            return
-        }
-    }
+		var upErr error
+		if *jsonLogging {
+			_, upErr = s.Up(ctx, optup.EventStreams(eventChannel))
+		} else {
+			_, upErr = s.Up(ctx, optup.ProgressStreams(os.Stdout))
+		}
+		if upErr != nil {
+			logger.Error("Failed to update project", zap.String("project", project.Name), zap.Error(upErr))
+		} else {
+			logger.Info("Successfully deployed project", zap.String("project", project.Name))
+		}
+		return upErr
+	}
 
-    logger.Info(fmt.Sprintf("Completed deployment for stack: %s", stack))
+	for _, project := range projects {
+		if err := deployProject(project); err != nil {
+			logger.Error("Failed to deploy project", zap.String("project", project.Name), zap.Error(err))
+			return
+		}
+	}
+
+	logger.Info("Completed deployment")
+}
+
+func destroy(stack string, projects []Project, source ProjectSource) {
+	logger := createOutputLogger().With(zap.String("stack", stack))
+	defer logger.Sync()
+
+	logger.Info("Starting destruction")
+
+	ctx := context.Background()
+
+	destroyProject := func(project Project) error {
+		if len(project.AllowedStacks) > 0 && !contains(project.AllowedStacks, stack) {
+			logger.Info("Skipping project (not in allowed stacks)", zap.String("project", project.Name))
+			return nil
+		}
+
+		logger.Info("Destroying project", zap.String("project", project.Name))
+		eventChannel := make(chan events.EngineEvent)
+		go processEvents(logger, eventChannel)
+
+		s, err := createOrSelectStack(ctx, stack, project, source)
+		if err != nil {
+			logger.Error("Failed to create or select stack", zap.Error(err))
+			return err
+		}
+
+		var destroyErr error
+		if *jsonLogging {
+			_, destroyErr = s.Destroy(ctx, optdestroy.EventStreams(eventChannel))
+		} else {
+			_, destroyErr = s.Destroy(ctx, optdestroy.ProgressStreams(os.Stdout))
+		}
+		if destroyErr != nil {
+			logger.Error("Failed to destroy project", zap.String("project", project.Name), zap.Error(destroyErr))
+		} else {
+			logger.Info("Successfully destroyed project", zap.String("project", project.Name))
+		}
+		return destroyErr
+	}
+
+	// Reverse the order of projects for destruction
+	for i := len(projects) - 1; i >= 0; i-- {
+		if err := destroyProject(projects[i]); err != nil {
+			logger.Error("Failed to destroy project", zap.String("project", projects[i].Name), zap.Error(err))
+			return
+		}
+	}
+
+	logger.Info("Completed destruction")
 }
 
 func contains(slice []string, str string) bool {
-    for _, v := range slice {
-        if v == str {
-            return true
-        }
-    }
-    return false
+	for _, v := range slice {
+		if v == str {
+			return true
+		}
+	}
+	return false
 }
 
-func destroy(stack string) {
-    logger := createOutputLogger().With(zap.String("stack", stack))
-    defer logger.Sync()
+func getValidStacks(requestedStacks []string, projects []Project) []string {
+	validStacks := make(map[string]bool)
+	for _, project := range projects {
+		if len(project.AllowedStacks) == 0 {
+			// If a project has no restrictions, all stacks are valid
+			for _, stack := range requestedStacks {
+				validStacks[stack] = true
+			}
+		} else {
+			for _, allowedStack := range project.AllowedStacks {
+				if contains(requestedStacks, allowedStack) {
+					validStacks[allowedStack] = true
+				}
+			}
+		}
+	}
 
-    logger.Info(fmt.Sprintf("Starting destruction for stack: %s", stack))
-
-    ctx := context.Background()
-
-    destroyProject := func(project Project) error {
-        if len(project.AllowedStacks) > 0 && !contains(project.AllowedStacks, stack) {
-            logger.Info(fmt.Sprintf("Skipping %s project for stack %s (not in allowed stacks)", project.Name, stack))
-            return nil
-        }
-
-        logger.Info(fmt.Sprintf("Destroying %s project for stack %s", project.Name, stack))
-        eventChannel := make(chan events.EngineEvent)
-        go processEvents(logger, eventChannel)
-        s := createOrSelectStack(ctx, stack, fmt.Sprintf("%s/%s", *path, project.Path))
-        var err error
-        if *jsonLogging {
-            _, err = s.Destroy(ctx, optdestroy.EventStreams(eventChannel))
-        } else {
-            _, err = s.Destroy(ctx, optdestroy.ProgressStreams(os.Stdout))
-        }
-        if err != nil {
-            logger.Error(fmt.Sprintf("Failed to destroy %s project for stack %s", project.Name, stack), zap.Error(err))
-        } else {
-            logger.Info(fmt.Sprintf("Successfully destroyed %s project for stack %s", project.Name, stack))
-        }
-        return err
-    }
-
-    // Define the order of destruction (reverse of deployment order)
-    destroyOrder := []string{"session-recorder", "demo-streamer", "monitoring", "eks", "vpc"}
-
-    for _, projectName := range destroyOrder {
-        project, exists := projects[projectName]
-        if !exists {
-            logger.Error(fmt.Sprintf("Unknown project type: %s", projectName))
-            continue
-        }
-        if err := destroyProject(project); err != nil {
-            logger.Error(fmt.Sprintf("Failed to destroy %s project for stack %s", project.Name, stack), zap.Error(err))
-            return
-        }
-    }
-
-    logger.Info(fmt.Sprintf("Completed destruction for stack: %s", stack))
-}
-
-func getValidStacks(requestedStacks []string) []string {
-    validStacks := make(map[string]bool)
-    for _, project := range projects {
-        if len(project.AllowedStacks) == 0 {
-            // If a project has no restrictions, all stacks are valid
-            for _, stack := range requestedStacks {
-                validStacks[stack] = true
-            }
-        } else {
-            for _, allowedStack := range project.AllowedStacks {
-                if contains(requestedStacks, allowedStack) {
-                    validStacks[allowedStack] = true
-                }
-            }
-        }
-    }
-    
-    result := make([]string, 0, len(validStacks))
-    for stack := range validStacks {
-        result = append(result, stack)
-    }
-    return result
+	result := make([]string, 0, len(validStacks))
+	for stack := range validStacks {
+		result = append(result, stack)
+	}
+	return result
 }
 
 func main() {
-    kingpin.Version("0.0.1")
+	kingpin.Version("0.0.1")
 
-    var wg sync.WaitGroup
-    stackLock := &sync.Mutex{}
-    activeStacks := make(map[string]bool)
+	startTime := time.Now()
 
-    switch kingpin.MustParse(app.Parse(os.Args[1:])) {
-    case deployCmd.FullCommand():
-        validStacks := getValidStacks(*stacks)
-        fmt.Printf("Valid stacks for deployment: %v\n", validStacks)
-        
-        wg.Add(len(validStacks))
-        for _, stack := range validStacks {
-            go func(stack string) {
-                defer wg.Done()
-                stackLock.Lock()
-                if activeStacks[stack] {
-                    stackLock.Unlock()
-                    return
-                }
-                activeStacks[stack] = true
-                stackLock.Unlock()
-                
-                deploy(stack)
-                
-                stackLock.Lock()
-                delete(activeStacks, stack)
-                stackLock.Unlock()
-            }(stack)
-        }
+	var wg sync.WaitGroup
+	stackLock := &sync.Mutex{}
+	activeStacks := make(map[string]bool)
 
-    case destroyCmd.FullCommand():
-        validStacks := getValidStacks(*stacks)
-        fmt.Printf("Valid stacks for destruction: %v\n", validStacks)
-        
-        wg.Add(len(validStacks))
-        for _, stack := range validStacks {
-            go func(stack string) {
-                defer wg.Done()
-                stackLock.Lock()
-                if activeStacks[stack] {
-                    stackLock.Unlock()
-                    return
-                }
-                activeStacks[stack] = true
-                stackLock.Unlock()
-                
-                destroy(stack)
-                
-                stackLock.Lock()
-                delete(activeStacks, stack)
-                stackLock.Unlock()
-            }(stack)
-        }
-    }
+	logger := createOutputLogger()
+	defer logger.Sync()
 
-    wg.Wait()
+	var operationType string
+	var projects []Project
+
+	switch kingpin.MustParse(app.Parse(os.Args[1:])) {
+	case deployCmd.FullCommand(), destroyCmd.FullCommand():
+		// Check if both git-url and local-path are specified
+		if *gitRepoURL != "" && *localPath != "" {
+			logger.Fatal("Error: Both --git-url and --local-path are specified. Please provide only one source.")
+		}
+
+		// Check if neither git-url nor local-path is specified
+		if *gitRepoURL == "" && *localPath == "" {
+			logger.Fatal("Error: Neither --git-url nor --local-path is specified. Please provide one source.")
+		}
+
+		source := ProjectSource{
+			IsGit:     *gitRepoURL != "",
+			GitURL:    *gitRepoURL,
+			GitBranch: *gitBranch,
+			LocalPath: *localPath,
+		}
+
+		// TODO: Implement logic to fetch projects dynamically based on source
+		// For now, we'll use a placeholder implementation
+		projects = []Project{
+			{Name: "vpc", Path: "vpcs", AllowedStacks: nil},
+			{Name: "eks", Path: "eks", AllowedStacks: nil},
+			{Name: "monitoring", Path: "monitoring", AllowedStacks: nil},
+			{Name: "demo-streamer", Path: "demo-streamer", AllowedStacks: []string{"west"}},
+			{Name: "session-recorder", Path: "session-recorder", AllowedStacks: []string{"west"}},
+		}
+
+		validStacks := getValidStacks(*stacks, projects)
+
+		if kingpin.MustParse(app.Parse(os.Args[1:])) == deployCmd.FullCommand() {
+			operationType = "deploy"
+			logger.Info("Starting deployment", zap.Strings("stacks", validStacks), zap.Any("projects", projects))
+
+			wg.Add(len(validStacks))
+			for _, stack := range validStacks {
+				go func(stack string) {
+					defer wg.Done()
+					stackLock.Lock()
+					if activeStacks[stack] {
+						stackLock.Unlock()
+						return
+					}
+					activeStacks[stack] = true
+					stackLock.Unlock()
+
+					deploy(stack, projects, source)
+
+					stackLock.Lock()
+					delete(activeStacks, stack)
+					stackLock.Unlock()
+				}(stack)
+			}
+		} else {
+			operationType = "destroy"
+			logger.Info("Starting destruction", zap.Strings("stacks", validStacks), zap.Any("projects", projects))
+
+			wg.Add(len(validStacks))
+			for _, stack := range validStacks {
+				go func(stack string) {
+					defer wg.Done()
+					stackLock.Lock()
+					if activeStacks[stack] {
+						stackLock.Unlock()
+						return
+					}
+					activeStacks[stack] = true
+					stackLock.Unlock()
+
+					destroy(stack, projects, source)
+
+					stackLock.Lock()
+					delete(activeStacks, stack)
+					stackLock.Unlock()
+				}(stack)
+			}
+		}
+	}
+
+	wg.Wait()
+
+	duration := time.Since(startTime)
+	logger.Info("Operation completed",
+		zap.String("operation_type", operationType),
+		zap.Duration("total_time", duration))
 }

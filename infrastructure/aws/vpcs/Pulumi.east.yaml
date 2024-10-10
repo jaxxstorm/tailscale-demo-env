@@ -3,6 +3,6 @@ config:
     - "797495827785"
   aws:region: us-east-1
   lbr-demo-vpcs:cidr_block: 172.19.0.0/16
-  tailscale:oauth_client_id: kZuWN5kvMb11CNTRL
+  tailscale:oauth_client_id: kdmzo8WJn911CNTRL
   tailscale:oauth_client_secret:
-    secure: AAABAB9Cbxx3IR8Mis1oixStVOHaRrCGfker0iSyDedjP5K4uLf8bG5fInMQ3jIpAA3iYWjF50/Prq684cqoISwlrIPjTKzTON2dBokhwa0J8qjUmYkRQDbN/0Uuyy4E
+    secure: AAABAJEA8tyfnzvPo1YN+5W4SP3gdicldoexiFID9g0ePS2ykyDmycGdSxhjRmys5jsTGhCnLDkuztoam7w+1HsG2PaX37Hh1+fvSYyKr8b9GQ80rr5hlNymGibgZW4=

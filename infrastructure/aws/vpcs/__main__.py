@@ -13,6 +13,10 @@ NAME = "-".join(REGION.split("-")[:2])
 CONFIG = pulumi.Config()
 
 CIDR_BLOCK = CONFIG.require("cidr_block")
+
+ENABLE_APP_CONNECTOR = CONFIG.get_bool("enable_app_connector", default=False)
+ENABLE_EXIT_NODE = CONFIG.get_bool("enable_exit_node", default=False)
+
 TAGS = {
     "environment": STACK,
     "project": PROJECT_NAME,
@@ -58,22 +62,38 @@ bastion = ts.aws.Bastion(
     high_availability=True,
     public=True,
     enable_ssh=True,
-    enable_exit_node=True,
-    tailscale_tags=["tag:bastion"],
+    enable_exit_node=False,
+    tailscale_tags=[f"tag:{STACK}", "tag:subnet-router"],
     opts=pulumi.ResourceOptions(parent=vpc),
 )
 
-connector = ts.aws.Bastion(
-    f"lbr-app-connector-{NAME}",
-    vpc_id=vpc.vpc_id,
-    subnet_ids=vpc.private_subnet_ids,
-    region=REGION,
-    high_availability=False,
-    public=False,
-    enable_app_connector=True,
-    tailscale_tags=["tag:appconnector"],
-    opts=pulumi.ResourceOptions(parent=vpc),
-)
+if ENABLE_APP_CONNECTOR:
+
+    connector = ts.aws.Bastion(
+        f"lbr-app-connector-{NAME}",
+        vpc_id=vpc.vpc_id,
+        subnet_ids=vpc.private_subnet_ids,
+        region=REGION,
+        high_availability=False,
+        public=False,
+        enable_app_connector=True,
+        tailscale_tags=[f"tag:{STACK}", "tag:appconnector"],
+        opts=pulumi.ResourceOptions(parent=vpc),
+    )
+
+if ENABLE_EXIT_NODE:
+
+    exitNode = ts.aws.Bastion(
+        f"lbr-exitnode-{NAME}",
+        vpc_id=vpc.vpc_id,
+        subnet_ids=vpc.private_subnet_ids,
+        region=REGION,
+        high_availability=False,
+        public=False,
+        enable_exit_node=True,
+        tailscale_tags=["tag:exit-node", f"tag:{STACK}"],
+        opts=pulumi.ResourceOptions(parent=vpc),
+    )
 
 pulumi.export(f"vpc_id", vpc.vpc_id)
 pulumi.export(f"public_subnet_ids", vpc.public_subnet_ids)
