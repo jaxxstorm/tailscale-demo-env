@@ -37,5 +37,4 @@ go run cli/main.go destroy --path $(pwd)/infrastructure/ --json
 
 ## Configuration
 
-Stack configuration has been checked into this repo. If you'd like to be able to run this entire repo, please open an issue and I'll move the stack configuration out of the repo.
-
+Configuration is handled by Pulumi ESC. All config is secured via the secrets encryption. You'll need to create your own stacks and configuration to use this repo

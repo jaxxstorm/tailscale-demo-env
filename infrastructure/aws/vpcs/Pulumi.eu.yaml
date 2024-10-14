@@ -1,8 +1,2 @@
-config:
-  aws:allowedAccountIds:
-    - "797495827785"
-  aws:region: eu-central-1
-  lbr-demo-vpcs:cidr_block: 172.18.0.0/16
-  tailscale:oauth_client_id: kdmzo8WJn911CNTRL
-  tailscale:oauth_client_secret:
-    secure: AAABAMF4MzgRVv7TiL5J9Y+MgtV+RY4zt3BIl4msYnyImzWEF6thESuPsjkl96EQ+qABbtZVXsVpBl/bZE9v9ShQITTk5g/NCLxzygIy0DmpQZd5CR2zzrat9RhAf+k=
+environment:
+- lbr-demo-vpcs/eu

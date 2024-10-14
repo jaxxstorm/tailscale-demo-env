@@ -39,10 +39,16 @@ var (
 	gitBranch   = app.Flag("git-branch", "Git branch to use").Default("main").String()
 	localPath   = app.Flag("path", "Path to local directory containing projects").String()
 	jsonLogging = app.Flag("json", "Enable JSON logging").Bool()
+	org 	   = app.Flag("org", "Organization to deploy to").String()
 	stacks      = app.Flag("stacks", "Stacks to deploy").Default("west", "east", "eu").Strings()
 )
 
-func createOrSelectStack(ctx context.Context, stackName string, project Project, source ProjectSource) (auto.Stack, error) {
+func createOrSelectStack(ctx context.Context, org string, stackName string, project Project, source ProjectSource) (auto.Stack, error) {
+	if org == "" {
+		stackName = stackName
+	} else {
+		stackName = org + "/" + stackName
+	}
 	if source.IsGit {
 		repo := auto.GitRepo{
 			URL:         source.GitURL,
@@ -84,7 +90,7 @@ func processEvents(logger *zap.Logger, eventChannel <-chan events.EngineEvent) {
 	}
 }
 
-func deploy(stack string, projects []Project, source ProjectSource) {
+func deploy(org string, stack string, projects []Project, source ProjectSource) {
 	logger := createOutputLogger().With(zap.String("stack", stack), zap.Any("projects", projects))
 	defer logger.Sync()
 
@@ -102,7 +108,7 @@ func deploy(stack string, projects []Project, source ProjectSource) {
 		eventChannel := make(chan events.EngineEvent)
 		go processEvents(logger, eventChannel)
 
-		s, err := createOrSelectStack(ctx, stack, project, source)
+		s, err := createOrSelectStack(ctx, org, stack, project, source)
 		if err != nil {
 			logger.Error("Failed to create or select stack", zap.Error(err))
 			return err
@@ -132,7 +138,7 @@ func deploy(stack string, projects []Project, source ProjectSource) {
 	logger.Info("Completed deployment")
 }
 
-func destroy(stack string, projects []Project, source ProjectSource) {
+func destroy(org string, stack string, projects []Project, source ProjectSource) {
 	logger := createOutputLogger().With(zap.String("stack", stack))
 	defer logger.Sync()
 
@@ -150,7 +156,7 @@ func destroy(stack string, projects []Project, source ProjectSource) {
 		eventChannel := make(chan events.EngineEvent)
 		go processEvents(logger, eventChannel)
 
-		s, err := createOrSelectStack(ctx, stack, project, source)
+		s, err := createOrSelectStack(ctx, org, stack, project, source)
 		if err != nil {
 			logger.Error("Failed to create or select stack", zap.Error(err))
 			return err
@@ -276,7 +282,7 @@ func main() {
 					activeStacks[stack] = true
 					stackLock.Unlock()
 
-					deploy(stack, projects, source)
+					deploy(*org, stack, projects, source)
 
 					stackLock.Lock()
 					delete(activeStacks, stack)
@@ -299,7 +305,7 @@ func main() {
 					activeStacks[stack] = true
 					stackLock.Unlock()
 
-					destroy(stack, projects, source)
+					destroy(*org, stack, projects, source)
 
 					stackLock.Lock()
 					delete(activeStacks, stack)

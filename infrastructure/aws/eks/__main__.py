@@ -15,7 +15,7 @@ TAGS = {
     "tailscale_org": "lbrlabs.com",
 }
 
-VPC = pulumi.StackReference(f"lbrlabs58/lbr-demo-vpcs/{STACK}")
+VPC = pulumi.StackReference(f"lbrlabs/lbr-demo-vpcs/{STACK}")
 VPC_ID = VPC.get_output("vpc_id")
 PUBLIC_SUBNET_IDS = VPC.require_output("public_subnet_ids")
 PRIVATE_SUBNET_IDS = VPC.require_output("private_subnet_ids")

@@ -1,5 +1,2 @@
-config:
-  aws:region: us-east-1
-  aws:allowedAccountIds:
-    - "797495827785"
-  lbr-demo-monitoring:grafana_enabled: false
+environment:
+- lbr-demo-monitoring/east

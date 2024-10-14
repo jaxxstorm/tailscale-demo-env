@@ -14,7 +14,7 @@ TAGS = {
     "org": "lbrlabs",
 }
 
-CLUSTER = pulumi.StackReference(f"lbrlabs58/lbr-demo-eks/{STACK}")
+CLUSTER = pulumi.StackReference(f"lbrlabs/lbr-demo-eks/{STACK}")
 CLUSTER_NAME = CLUSTER.require_output("cluster_name")
 KUBECONFIG = CLUSTER.require_output("kubeconfig")
 PROXYCLASS = CLUSTER.require_output("proxyclass")
@@ -43,8 +43,10 @@ monitoring_ns = k8s.core.v1.Namespace(
     opts=pulumi.ResourceOptions(provider=provider),
 )
 
+svc_deps = []
+
 if GRAFANA_ENABLED:
-    VPC = pulumi.StackReference(f"lbrlabs58/lbr-demo-vpcs/{STACK}")
+    VPC = pulumi.StackReference(f"lbrlabs/lbr-demo-vpcs/{STACK}")
     VPC_ID = VPC.get_output("vpc_id")
     PRIVATE_SUBNET_IDS = VPC.get_output("private_subnet_ids")
 
@@ -157,6 +159,8 @@ if GRAFANA_ENABLED:
                 },
             }
         )
+        
+        svc_deps.append(ext_svc)
 
     grafana_config = {
         "enabled": GRAFANA_ENABLED,
@@ -321,7 +325,7 @@ kube_prometheus = k8s.helm.v3.Release(
             },
         },
     },
-    opts=pulumi.ResourceOptions(parent=monitoring_ns, provider=provider),
+    opts=pulumi.ResourceOptions(parent=monitoring_ns, provider=provider, depends_on=svc_deps),
 )
 
 metrics_svc = k8s.core.v1.Service(

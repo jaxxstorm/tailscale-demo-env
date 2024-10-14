@@ -12,7 +12,7 @@ LABELS = {
     "org": "lbrlabs",
 }
 
-CLUSTER = pulumi.StackReference(f"lbrlabs58/lbr-demo-eks/{STACK}")
+CLUSTER = pulumi.StackReference(f"lbrlabs/lbr-demo-eks/{STACK}")
 CLUSTER_NAME = CLUSTER.get_output("cluster_name")
 KUBECONFIG = CLUSTER.get_output("kubeconfig")
 
