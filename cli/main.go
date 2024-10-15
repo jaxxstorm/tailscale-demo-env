@@ -39,15 +39,16 @@ var (
 	gitBranch   = app.Flag("git-branch", "Git branch to use").Default("main").String()
 	localPath   = app.Flag("path", "Path to local directory containing projects").String()
 	jsonLogging = app.Flag("json", "Enable JSON logging").Bool()
-	org 	   = app.Flag("org", "Organization to deploy to").String()
+	org         = app.Flag("org", "Organization to deploy to").String()
 	stacks      = app.Flag("stacks", "Stacks to deploy").Default("west", "east", "eu").Strings()
 )
 
 func createOrSelectStack(ctx context.Context, org string, stackName string, project Project, source ProjectSource) (auto.Stack, error) {
+	var usedStackName string
 	if org == "" {
-		stackName = stackName
+		usedStackName = stackName
 	} else {
-		stackName = org + "/" + stackName
+		usedStackName = org + "/" + stackName
 	}
 	if source.IsGit {
 		repo := auto.GitRepo{
@@ -55,10 +56,10 @@ func createOrSelectStack(ctx context.Context, org string, stackName string, proj
 			Branch:      source.GitBranch,
 			ProjectPath: project.Path,
 		}
-		return auto.UpsertStackRemoteSource(ctx, stackName, repo)
+		return auto.UpsertStackRemoteSource(ctx, usedStackName, repo)
 	}
 	projectPath := filepath.Join(source.LocalPath, project.Path)
-	return auto.UpsertStackLocalSource(ctx, stackName, projectPath)
+	return auto.UpsertStackLocalSource(ctx, usedStackName, projectPath)
 }
 
 func createOutputLogger() *zap.Logger {
