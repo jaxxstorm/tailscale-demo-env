@@ -35,10 +35,16 @@ TAILSCALE_OAUTH_CLIENT_SECRET = TAILSCALE_CONFIG.require_secret("oauth_client_se
 
 CONFIG = pulumi.Config()
 SITE = CONFIG.require_int("site")
-CLUSTER_ENDPOINT_PRIVATE_ACCESS = CONFIG.get_bool("cluster_endpoint_private_access", default=True)
-CLUSTER_ENDPOINT_PUBLIC_ACCESS = CONFIG.get_bool("cluster_endpoint_public_access", default=True)
+CLUSTER_ENDPOINT_PRIVATE_ACCESS = CONFIG.get_bool(
+    "cluster_endpoint_private_access", default=True
+)
+CLUSTER_ENDPOINT_PUBLIC_ACCESS = CONFIG.get_bool(
+    "cluster_endpoint_public_access", default=True
+)
 
 ADMIN_ACCESS_PRINCIPAL = aws.iam.get_role_output(name=ADMIN_ROLE_NAME)
+
+ENABLE_SPOT_INSTANCE = CONFIG.get_bool("enable_spot_instance", default=False)
 
 
 cluster = eks.Cluster(
@@ -82,6 +88,38 @@ provider = k8s.Provider(
     opts=pulumi.ResourceOptions(depends_on=[ingress]),
 )
 
+requirements = [
+    eks.RequirementArgs(
+        key="kubernetes.io/arch",
+        operator="In",
+        values=["amd64"],
+    ),
+    eks.RequirementArgs(
+        key="kubernetes.io/os",
+        operator="In",
+        values=["linux"],
+    ),
+    eks.RequirementArgs(
+        key="karpenter.k8s.aws/instance-family",
+        operator="In",
+        values=["t3"],
+    ),
+    eks.RequirementArgs(
+        key="karpenter.k8s.aws/instance-size",
+        operator="In",
+        values=["medium"],
+    ),
+]
+
+if ENABLE_SPOT_INSTANCE:
+    requirements.append(
+        eks.RequirementArgs(
+            key="lbrlabs.com/spot",
+            operator="In",
+            values=["true"],
+        )
+    )
+
 
 # create a karpenter autoscaling group
 workload = eks.AutoscaledNodeGroup(
@@ -89,33 +127,7 @@ workload = eks.AutoscaledNodeGroup(
     node_role=cluster.karpenter_node_role.name,
     security_group_ids=[cluster.control_plane.vpc_config.cluster_security_group_id],
     subnet_ids=PRIVATE_SUBNET_IDS,
-    requirements=[
-        eks.RequirementArgs(
-            key="kubernetes.io/arch",
-            operator="In",
-            values=["amd64"],
-        ),
-        eks.RequirementArgs(
-            key="kubernetes.io/os",
-            operator="In",
-            values=["linux"],
-        ),
-        eks.RequirementArgs(
-            key="karpenter.k8s.aws/instance-family",
-            operator="In",
-            values=["t3"],
-        ),
-        eks.RequirementArgs(
-            key="karpenter.k8s.aws/instance-size",
-            operator="In",
-            values=["medium"],
-        ),
-        eks.RequirementArgs(
-            key="karpenter.sh/capacity-type",
-            operator="In",
-            values=["spot"],
-        ),
-    ],
+    requirements=requirements,
     opts=pulumi.ResourceOptions(
         provider=provider,
     ),
@@ -229,7 +241,7 @@ service_router = k8s.apiextensions.CustomResource(
     spec={
         "hostname": f"eks-service-router-{NAME}",
         "subnetRouter": {"advertiseRoutes": [ipv6_cidr]},
-         "tags": [f"tag:{STACK}", "tag:service-router"],
+        "tags": [f"tag:{STACK}", "tag:service-router"],
     },
     opts=pulumi.ResourceOptions(
         provider=provider, parent=tailscale_operator, depends_on=[tailscale_operator]
