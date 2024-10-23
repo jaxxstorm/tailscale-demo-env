@@ -42,7 +42,6 @@ var (
 	org         = app.Flag("org", "Organization to deploy to").String()
 	stacks      = app.Flag("stacks", "Stacks to deploy").Default("west", "east", "eu").Strings()
 )
-
 func createOrSelectStack(ctx context.Context, org string, stackName string, project Project, source ProjectSource) (auto.Stack, error) {
 	var usedStackName string
 	if org == "" {
