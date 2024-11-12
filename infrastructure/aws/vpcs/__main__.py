@@ -11,8 +11,11 @@ AWS_CONFIG = pulumi.Config("aws")
 REGION = AWS_CONFIG.require("region")
 NAME = "-".join(REGION.split("-")[:2])
 CONFIG = pulumi.Config()
-
 CIDR_BLOCK = CONFIG.require("cidr_block")
+
+PULUMI_CONFIG = pulumi.Config("pulumi")
+RESOURCE_PREFIX = PULUMI_CONFIG.require("resourcePrefix")
+
 
 ENABLE_APP_CONNECTOR = CONFIG.get_bool("enable_app_connector", default=False)
 ENABLE_EXIT_NODE = CONFIG.get_bool("enable_exit_node", default=False)
@@ -28,7 +31,7 @@ TAGS = {
 CONFIG = pulumi.Config()
 
 vpc = awsx.ec2.Vpc(
-    f"lbr-vpc-{NAME}",
+    f"{RESOURCE_PREFIX}-vpc-{NAME}",
     cidr_block=CIDR_BLOCK,
     subnet_strategy="Auto",
     subnet_specs=[
@@ -54,7 +57,7 @@ vpc = awsx.ec2.Vpc(
 
 
 bastion = ts.aws.Bastion(
-    f"lbr-subnet-router-{NAME}",
+    f"{RESOURCE_PREFIX}-subnet-router-{NAME}",
     vpc_id=vpc.vpc_id,
     subnet_ids=vpc.public_subnet_ids,
     region=REGION,
@@ -70,7 +73,7 @@ bastion = ts.aws.Bastion(
 if ENABLE_APP_CONNECTOR:
 
     connector = ts.aws.Bastion(
-        f"lbr-app-connector-{NAME}",
+        f"{RESOURCE_PREFIX}-app-connector-{NAME}",
         vpc_id=vpc.vpc_id,
         subnet_ids=vpc.private_subnet_ids,
         region=REGION,
@@ -84,7 +87,7 @@ if ENABLE_APP_CONNECTOR:
 if ENABLE_EXIT_NODE:
 
     exitNode = ts.aws.Bastion(
-        f"lbr-exitnode-{NAME}",
+        f"{RESOURCE_PREFIX}-exitnode-{NAME}",
         vpc_id=vpc.vpc_id,
         subnet_ids=vpc.private_subnet_ids,
         region=REGION,

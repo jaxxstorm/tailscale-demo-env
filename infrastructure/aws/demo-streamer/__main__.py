@@ -3,6 +3,8 @@ import pulumi_kubernetes as k8s
 
 PROJECT_NAME = pulumi.get_project()
 STACK = pulumi.get_stack()
+CONFIG = pulumi.Config("pulumi")
+PULUMI_ORG = CONFIG.require("orgName")
 
 LABELS = {
     "environment": STACK,
@@ -12,7 +14,7 @@ LABELS = {
     "org": "lbrlabs",
 }
 
-CLUSTER = pulumi.StackReference(f"lbrlabs/lbr-demo-eks/{STACK}")
+CLUSTER = pulumi.StackReference(f"{PULUMI_ORG}/lbr-demo-eks/{STACK}")
 CLUSTER_NAME = CLUSTER.get_output("cluster_name")
 KUBECONFIG = CLUSTER.get_output("kubeconfig")
 

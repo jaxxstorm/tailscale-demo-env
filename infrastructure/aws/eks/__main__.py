@@ -6,6 +6,9 @@ import ip_calc
 
 PROJECT_NAME = pulumi.get_project()
 STACK = pulumi.get_stack()
+PULUMI_CONFIG = pulumi.Config("pulumi")
+PULUMI_ORG = PULUMI_CONFIG.require("orgName")
+RESOURCE_PREFIX = PULUMI_CONFIG.require("resourcePrefix")
 
 TAGS = {
     "environment": STACK,
@@ -15,7 +18,7 @@ TAGS = {
     "tailscale_org": "lbrlabs.com",
 }
 
-VPC = pulumi.StackReference(f"lbrlabs/lbr-demo-vpcs/{STACK}")
+VPC = pulumi.StackReference(f"{PULUMI_ORG}/lbr-demo-vpcs/{STACK}")
 VPC_ID = VPC.get_output("vpc_id")
 PUBLIC_SUBNET_IDS = VPC.require_output("public_subnet_ids")
 PRIVATE_SUBNET_IDS = VPC.require_output("private_subnet_ids")
@@ -48,7 +51,7 @@ ENABLE_SPOT_INSTANCE = CONFIG.get_bool("enable_spot_instance", default=False)
 
 
 cluster = eks.Cluster(
-    f"lbr-{NAME}",
+    f"{RESOURCE_PREFIX}-{NAME}",
     cluster_subnet_ids=PRIVATE_SUBNET_IDS,
     system_node_subnet_ids=PRIVATE_SUBNET_IDS,
     system_node_instance_types=["t3.medium"],
@@ -83,7 +86,7 @@ ingress = aws.ec2.SecurityGroupRule(
 # create a provider
 # we need to wait for the ingress sg rule so we can use it
 provider = k8s.Provider(
-    f"lbr-{NAME}",
+    f"{RESOURCE_PREFIX}-{NAME}",
     kubeconfig=cluster.kubeconfig,
     opts=pulumi.ResourceOptions(depends_on=[ingress]),
 )
@@ -123,7 +126,7 @@ if ENABLE_SPOT_INSTANCE:
 
 # create a karpenter autoscaling group
 workload = eks.AutoscaledNodeGroup(
-    f"lbr-{NAME}-private",
+    f"{RESOURCE_PREFIX}-{NAME}-private",
     node_role=cluster.karpenter_node_role.name,
     security_group_ids=[cluster.control_plane.vpc_config.cluster_security_group_id],
     subnet_ids=PRIVATE_SUBNET_IDS,

@@ -5,6 +5,9 @@ import pulumi
 
 PROJECT_NAME = pulumi.get_project()
 STACK = pulumi.get_stack()
+PULUMI_CONFIG = pulumi.Config("pulumi")
+PULUMI_ORG = PULUMI_CONFIG.require("orgName")
+RESOURCE_PREFIX = PULUMI_CONFIG.require("resourcePrefix")
 
 TAGS = {
     "environment": STACK,
@@ -14,7 +17,7 @@ TAGS = {
     "org": "lbrlabs",
 }
 
-CLUSTER = pulumi.StackReference(f"lbrlabs/lbr-demo-eks/{STACK}")
+CLUSTER = pulumi.StackReference(f"{PULUMI_ORG}/lbr-demo-eks/{STACK}")
 CLUSTER_NAME = CLUSTER.require_output("cluster_name")
 KUBECONFIG = CLUSTER.require_output("kubeconfig")
 PROXYCLASS = CLUSTER.require_output("proxyclass")
@@ -30,7 +33,7 @@ GRAFANA_INGRESS_ENABLED = CONFIG.get_bool("grafana_ingress_enabled")
 
 
 provider = k8s.Provider(
-    f"lbr-{NAME}",
+    f"{RESOURCE_PREFIX}-{NAME}",
     kubeconfig=KUBECONFIG,
     opts=pulumi.ResourceOptions(parent=CLUSTER),
 )
@@ -46,13 +49,13 @@ monitoring_ns = k8s.core.v1.Namespace(
 svc_deps = []
 
 if GRAFANA_ENABLED:
-    VPC = pulumi.StackReference(f"lbrlabs/lbr-demo-vpcs/{STACK}")
+    VPC = pulumi.StackReference(f"{PULUMI_ORG}/lbr-demo-vpcs/{STACK}")
     VPC_ID = VPC.get_output("vpc_id")
     PRIVATE_SUBNET_IDS = VPC.get_output("private_subnet_ids")
 
     subnet_group = aws.rds.SubnetGroup(
-        f"lbr-{NAME}",
-        description=f"lbr demo env: Subnet group for grafana monitoring",
+        f"{RESOURCE_PREFIX}-{NAME}",
+        description=f"ts-demos demo env: Subnet group for grafana monitoring",
         subnet_ids=PRIVATE_SUBNET_IDS,
         tags=TAGS,
     )
@@ -61,8 +64,8 @@ if GRAFANA_ENABLED:
     vpc = aws.ec2.get_vpc(id=VPC_ID)
 
     security_group = aws.ec2.SecurityGroup(
-        f"lbr-{NAME}-db-sg",
-        description=f"Security group for lbr grafana database",
+        f"{RESOURCE_PREFIX}-{NAME}-db-sg",
+        description=f"Security group for ts-demos grafana database",
         vpc_id=VPC_ID,
         ingress=[
             aws.ec2.SecurityGroupIngressArgs(
@@ -84,13 +87,13 @@ if GRAFANA_ENABLED:
     )
 
     db_password = random.RandomPassword(
-        f"lbr-{NAME}-db-password",
+        f"{RESOURCE_PREFIX}-{NAME}-db-password",
         length=32,
         special=False,
     )
 
     db = aws.rds.Instance(
-        f"lbr-{NAME}-grafana",
+        f"{RESOURCE_PREFIX}-{NAME}-grafana",
         db_subnet_group_name=subnet_group.name,
         allocated_storage=20,
         max_allocated_storage=100,

@@ -5,6 +5,9 @@ import json
 
 PROJECT_NAME = pulumi.get_project()
 STACK = pulumi.get_stack()
+PULUMI_CONFIG = pulumi.Config("pulumi")
+PULUMI_ORG = PULUMI_CONFIG.require("orgName")
+RESOURCE_PREFIX = PULUMI_CONFIG.require("resourcePrefix")
 
 TAGS = {
     "environment": STACK,
@@ -14,7 +17,7 @@ TAGS = {
     "tailscale_org": "lbrlabs.com",
 }
 
-VPC = pulumi.StackReference(f"lbrlabs/lbr-demo-vpcs/{STACK}")
+VPC = pulumi.StackReference(f"{PULUMI_ORG}/lbr-demo-vpcs/{STACK}")
 VPC_ID = VPC.get_output("vpc_id")
 PUBLIC_SUBNET_IDS = VPC.require_output("public_subnet_ids")
 PRIVATE_SUBNET_IDS = VPC.require_output("private_subnet_ids")
@@ -27,13 +30,13 @@ REGION = AWS_CONFIG.require("region")
 
 
 bucket = aws.s3.Bucket(
-    "lbr-session-bucket",
+    f"{RESOURCE_PREFIX}-session-bucket",
     force_destroy=True,
     tags=TAGS,
 )
 
 aws.s3.BucketOwnershipControls(
-    "lbr-session-bucket-ownership-controls",
+    f"{RESOURCE_PREFIX}-session-bucket-ownership-controls",
     bucket=bucket.bucket,
     rule=aws.s3.BucketOwnershipControlsRuleArgs(
         object_ownership="BucketOwnerPreferred",
@@ -64,18 +67,18 @@ policy_doc = aws.iam.get_policy_document_output(
 )
 
 policy = aws.iam.Policy(
-    "lbr-session-bucket-policy",
+    f"{RESOURCE_PREFIX}-session-bucket-policy",
     description="Allow S3 bucket access",
     policy=policy_doc.json,
 )
 
 log_group = aws.cloudwatch.LogGroup(
-    "lbr-session-recorder",
+    f"{RESOURCE_PREFIX}-session-recorder",
     retention_in_days=3,
 )
 
 task_execution_role = aws.iam.Role(
-    "lbr-session-recorder-task-exec-role",
+    f"{RESOURCE_PREFIX}-session-recorder-task-exec-role",
     assume_role_policy=json.dumps(
         {
             "Version": "2008-10-17",
@@ -92,14 +95,14 @@ task_execution_role = aws.iam.Role(
 )
 
 aws.iam.RolePolicyAttachment(
-    "lbr-session-recorder-ecs-policy-attachment",
+    f"{RESOURCE_PREFIX}-session-recorder-ecs-policy-attachment",
     role=task_execution_role.name,
     policy_arn="arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy",
     opts=pulumi.ResourceOptions(parent=task_execution_role),
 )
 
 task_role = aws.iam.Role(
-    "lbr-session-recorder",
+    f"{RESOURCE_PREFIX}-session-recorder",
     assume_role_policy=json.dumps(
         {
             "Version": "2012-10-17",
@@ -116,14 +119,14 @@ task_role = aws.iam.Role(
 )
 
 aws.iam.RolePolicyAttachment(
-    "lbr-session-recorder-ecs",
+    f"{RESOURCE_PREFIX}-session-recorder-ecs",
     role=task_role.name,
     policy_arn=aws.iam.ManagedPolicy.AMAZON_ECS_FULL_ACCESS,
     opts=pulumi.ResourceOptions(parent=task_role),
 )
 
 aws.iam.RolePolicyAttachment(
-    "lbr-session-recorder-s3",
+    f"{RESOURCE_PREFIX}-session-recorder-s3",
     role=task_role.name,
     policy_arn=policy.arn,
     opts=pulumi.ResourceOptions(parent=task_role),
@@ -139,7 +142,7 @@ image = aws.ecr.get_image_output(
 )
 
 ts_key = tailscale.TailnetKey(
-    "lbr-session-recorder",
+    f"{RESOURCE_PREFIX}-session-recorder",
     ephemeral=True,
     reusable=True,
     preauthorized=True,
@@ -147,8 +150,8 @@ ts_key = tailscale.TailnetKey(
 )
 
 task_definition = aws.ecs.TaskDefinition(
-    "lbr-session-recorder",
-    family="lbr-session-recorder",
+    f"{RESOURCE_PREFIX}-session-recorder",
+    family=f"{RESOURCE_PREFIX}-session-recorder",
     cpu="256",
     memory="512",
     network_mode="awsvpc",
@@ -184,7 +187,7 @@ task_definition = aws.ecs.TaskDefinition(
                         "awslogs-group": log_group.id,
                         "awslogs-region": aws.get_region().name,
                         "awslogs-stream-prefix": pulumi.Output.concat(
-                            "lbr-session-recorder"
+                            "{RESOURCE_PREFIX}-session-recorder"
                         ),
                     },
                 },
@@ -195,7 +198,7 @@ task_definition = aws.ecs.TaskDefinition(
 )
 
 security_group = aws.ec2.SecurityGroup(
-    "lbr-session-recorder",
+    f"{RESOURCE_PREFIX}-session-recorder",
     vpc_id=VPC_ID,
     egress=[
         aws.ec2.SecurityGroupEgressArgs(
@@ -209,7 +212,7 @@ security_group = aws.ec2.SecurityGroup(
 )
 
 service = aws.ecs.Service(
-    "lbr-session-recorder",
+    f"{RESOURCE_PREFIX}-session-recorder",
     cluster=CLUSTER_ARN,
     desired_count=1,
     launch_type="FARGATE",
