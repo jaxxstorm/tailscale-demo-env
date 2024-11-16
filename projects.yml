@@ -1,9 +1,11 @@
 projects:
   - name: "vpcs"
     stacks: ["east", "west", "eu"]
+  - name: "ecs"
+    stacks: ["west"]
   - name: "session-recorder"
     stacks: ["west"]
-    dependsOn: [] # doesn't depend on anything
+    dependsOn: ["ecs", "vpcs"] 
   - name: "eks"
     stacks: ["east", "west", "eu"]
     dependsOn: ["vpcs"]
@@ -13,6 +15,3 @@ projects:
   - name: "demo-streamer"
     stacks: ["west"]
     dependsOn: ["eks"]
-  - name: "session-recorder"
-    stacks: ["west"]
-    dependsOn: [] # doesn't depend on anything

@@ -22,7 +22,7 @@ VPC_ID = VPC.get_output("vpc_id")
 PUBLIC_SUBNET_IDS = VPC.require_output("public_subnet_ids")
 PRIVATE_SUBNET_IDS = VPC.require_output("private_subnet_ids")
 
-ECS = pulumi.StackReference(f"lbrlabs/ecs/{STACK}")
+ECS = pulumi.StackReference(f"{PULUMI_ORG}/ecs/{STACK}")
 CLUSTER_ARN = ECS.require_output("cluster_arn")
 
 AWS_CONFIG = pulumi.Config("aws")
