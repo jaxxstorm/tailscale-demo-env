@@ -4,8 +4,10 @@ go 1.21.5
 
 require (
 	github.com/alecthomas/kingpin/v2 v2.4.0
+	github.com/dominikbraun/graph v0.23.0
 	github.com/pulumi/pulumi/sdk/v3 v3.111.1
 	go.uber.org/zap v1.27.0
+	gopkg.in/yaml.v3 v3.0.1
 )
 
 require (
@@ -94,6 +96,5 @@ require (
 	google.golang.org/protobuf v1.31.0 // indirect
 	gopkg.in/tomb.v1 v1.0.0-20141024135613-dd632973f1e7 // indirect
 	gopkg.in/warnings.v0 v0.1.2 // indirect
-	gopkg.in/yaml.v3 v3.0.1 // indirect
 	lukechampine.com/frand v1.4.2 // indirect
 )
