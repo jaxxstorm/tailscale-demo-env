@@ -235,6 +235,8 @@ proxyclass = k8s.apiextensions.CustomResource(
     ),
 )
 
+
+
 pulumi.export("proxyclass", proxyclass.metadata["name"])
 
 service_router = k8s.apiextensions.CustomResource(

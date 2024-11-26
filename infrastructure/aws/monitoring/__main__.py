@@ -129,11 +129,30 @@ if GRAFANA_ENABLED:
 
     for region in regions:
 
+        # create a HA egress proxy
+
+        proxygroup = k8s.apiextensions.CustomResource(
+            f"prometheus-{region}-ha",
+            kind="ProxyGroup",
+            api_version="tailscale.com/v1alpha1",
+            spec={
+                "type": "egress",
+                "tags": ["tag:k8s", "tag:egress", "tag:monitoring"],
+                "hostnamePrefix": f"prom-{region}",
+                "proxyClass": PROXYCLASS,
+            },
+            opts=pulumi.ResourceOptions(
+                provider=provider,
+                parent=monitoring_ns,
+            ),
+        )
+
         ext_svc = k8s.core.v1.Service(
             f"prometheus-{region}",
             metadata=k8s.meta.v1.ObjectMetaArgs(
                 annotations={
                     "tailscale.com/tailnet-fqdn": f"monitoring-prometheus-{region}.{TAILNET_ADDRESS}",
+                    "tailscale.com/proxy-group": proxygroup.metadata["name"],
                 },
                 name=f"prom-{region}",
                 namespace=monitoring_ns.metadata.name,
@@ -162,7 +181,7 @@ if GRAFANA_ENABLED:
                 },
             }
         )
-        
+
         svc_deps.append(ext_svc)
 
     grafana_config = {
@@ -328,7 +347,9 @@ kube_prometheus = k8s.helm.v3.Release(
             },
         },
     },
-    opts=pulumi.ResourceOptions(parent=monitoring_ns, provider=provider, depends_on=svc_deps),
+    opts=pulumi.ResourceOptions(
+        parent=monitoring_ns, provider=provider, depends_on=svc_deps
+    ),
 )
 
 metrics_svc = k8s.core.v1.Service(
@@ -383,6 +404,10 @@ pod_monitor = k8s.apiextensions.CustomResource(
                 "port": "metrics",
                 "path": "/debug/metrics",
             },
+            {
+                "port": "metrics",
+                "path": "/metrics",
+            }
         ],
     },
     opts=pulumi.ResourceOptions(
