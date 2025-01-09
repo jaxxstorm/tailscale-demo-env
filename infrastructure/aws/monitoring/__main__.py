@@ -101,7 +101,6 @@ if GRAFANA_ENABLED:
         db_name="grafana",
         engine="postgres",
         instance_class="db.t4g.micro",
-        engine_version="13.13",
         vpc_security_group_ids=[security_group.id],
         username="grafana",
         password="correct-horse-battery-stable",
